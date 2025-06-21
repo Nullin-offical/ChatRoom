@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatRoom</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <meta name="theme-color" content="#181a20">
+    <meta name="description" content="A modern real-time chatroom platform.">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/theme.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Inter:400,600&display=swap" rel="stylesheet">
+</head>
+<body class="bg-dark text-light d-flex flex-column min-vh-100">
+    <nav class="navbar navbar-expand-lg navbar-dark py-3 navbar-animate" style="background: var(--bg-navbar);">
+        <div class="container" style="max-width: 1100px;">
+            <a class="navbar-brand fw-bold" href="/" style="color: var(--color-primary); font-size:1.5rem;">ChatRoom</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto align-items-center gap-2">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item"><a class="nav-link" href="/dashboard" aria-label="Dashboard">Dashboard</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/chat" aria-label="Chatroom">Chatroom</a></li>
+                        {% if current_user.is_admin %}
+                        <li class="nav-item"><a class="nav-link text-warning" href="/admin" aria-label="Admin">Admin</a></li>
+                        {% endif %}
+                        <li class="nav-item"><a class="nav-link" href="/profile" aria-label="Profile">Profile</a></li>
+                        <li class="nav-item"><span class="navbar-text me-2">{{ current_user.username }}</span></li>
+                        <li class="nav-item"><a class="nav-link" href="/logout" aria-label="Logout">Logout</a></li>
+                    {% else %}
+                        <li class="nav-item"><a class="nav-link" href="/login" aria-label="Login">Login</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/register" aria-label="Register">Register</a></li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <main class="flex-grow-1 d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
+      <div class="container py-4 card-animate" style="max-width: 900px;">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+    <footer class="mt-auto py-3 bg-transparent text-center small" style="letter-spacing:0.5px;">
+      <div class="container">
+        <hr class="mb-2" style="border-color:rgba(255,255,255,0.08);">
+        <span style="color:#fff; font-weight:600; font-size:1.08rem; text-shadow:0 2px 8px #4f8cff44;">
+          &copy; 2025 ChatRoom &mdash; Crafted with <span class="footer-heart" style="color:var(--color-accent); font-size:1.2em;">❤</span> by <span style="color:var(--color-primary); font-weight:700;">H0lwin</span>
+        </span>
+      </div>
+    </footer>
+    <!-- Toasts for flash messages -->
+    <div aria-live="polite" aria-atomic="true" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="toast align-items-center text-bg-dark border-0 show mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+              <div class="d-flex">
+                <div class="toast-body">
+                  {{ message }}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      document.querySelectorAll('.toast').forEach(toastEl => {
+        new bootstrap.Toast(toastEl, { delay: 4000 }).show();
+      });
+    </script>
+</body>
+</html> 

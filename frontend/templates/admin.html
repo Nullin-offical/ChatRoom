@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .admin-glass {
+    background: rgba(35,38,47,0.92);
+    border-radius: 2rem;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(79,140,255,0.15);
+    padding: 2.5rem 2rem;
+    margin: auto;
+    z-index: 1;
+  }
+  .tab-content {
+    margin-top: 1.5rem;
+  }
+  .admin-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-right: 0.5rem;
+    box-shadow: 0 1px 4px #4f8cff44;
+  }
+  .admin-badge-admin {
+    background: var(--color-accent);
+    color: #23262f;
+    font-weight: 600;
+    border-radius: 0.7rem;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.95rem;
+    margin-left: 0.5rem;
+  }
+  .form-control {
+    background: rgba(40,44,54,0.98) !important;
+    color: #f8f8f2 !important;
+    border: 1.5px solid #4f8cff66 !important;
+    border-radius: 1.2rem !important;
+    font-size: 1.08rem;
+    font-weight: 500;
+    box-shadow: 0 1px 4px #4f8cff22;
+    caret-color: var(--color-accent) !important;
+  }
+  .form-control:focus {
+    border-color: var(--color-accent) !important;
+    box-shadow: 0 0 0 0.2rem #ff6ec488 !important;
+    background: rgba(40,44,54,1) !important;
+    color: #fff !important;
+  }
+  ::placeholder {
+    color: #e0e0e0 !important;
+    opacity: 1;
+  }
+  .table, .table th, .table td {
+    background: rgba(30, 34, 44, 0.98) !important;
+    color: #f8f8f2 !important;
+    border-color: #4f8cff22 !important;
+  }
+  .modal-content {
+    background: rgba(30, 34, 44, 0.97) !important;
+    color: #f8f8f2 !important;
+    border-radius: 1.2rem !important;
+    border: 1.5px solid #4f8cff22 !important;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    backdrop-filter: blur(14px);
+  }
+</style>
+<div class="admin-glass mt-4">
+  <h2 class="mb-4"><i class="bi bi-shield-lock me-2"></i>Admin Panel</h2>
+  <ul class="nav nav-tabs" id="adminTab" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab" aria-controls="users" aria-selected="true"><i class="bi bi-people me-1"></i>Users</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-1"></i>Messages</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="rooms-tab" data-bs-toggle="tab" data-bs-target="#rooms" type="button" role="tab" aria-controls="rooms" aria-selected="false"><i class="bi bi-door-open me-1"></i>Rooms</button>
+    </li>
+  </ul>
+  <div class="tab-content" id="adminTabContent">
+    <div class="tab-pane fade show active" id="users" role="tabpanel" aria-labelledby="users-tab">
+      <table class="table table-bordered table-sm mt-3">
+        <thead><tr><th></th><th>ID</th><th>Username</th><th>Email</th><th>Admin</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td><span class="admin-avatar"><i class="bi bi-person"></i></span></td>
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }} {% if user.is_admin %}<span class="admin-badge-admin">admin</span>{% endif %}</td>
+            <td>{{ user.email }}</td>
+            <td>{% if user.is_admin %}✔️{% endif %}</td>
+            <td>
+              {% if user.id != current_user.id %}
+              <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmDeleteUser{{ user.id }}"><i class="bi bi-trash"></i></button>
+              <!-- Modal -->
+              <div class="modal fade" id="confirmDeleteUser{{ user.id }}" tabindex="-1" aria-labelledby="confirmDeleteUserLabel{{ user.id }}" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title" id="confirmDeleteUserLabel{{ user.id }}">Delete User</h5>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                      Are you sure you want to delete user <strong>{{ user.username }}</strong>? This cannot be undone.
+                    </div>
+                    <div class="modal-footer">
+                      <form method="post" action="/admin/delete_user">
+                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {% else %}
+              <span class="text-muted">(You)</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="tab-pane fade" id="messages" role="tabpanel" aria-labelledby="messages-tab">
+      <table class="table table-bordered table-sm mt-3">
+        <thead><tr><th>ID</th><th>User</th><th>Content</th><th>Time</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for msg in messages %}
+          <tr>
+            <td>{{ msg.id }}</td>
+            <td>{{ msg.username }}</td>
+            <td>{{ msg.content }}</td>
+            <td>{{ msg.timestamp }}</td>
+            <td>
+              <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmDeleteMsg{{ msg.id }}"><i class="bi bi-trash"></i></button>
+              <!-- Modal -->
+              <div class="modal fade" id="confirmDeleteMsg{{ msg.id }}" tabindex="-1" aria-labelledby="confirmDeleteMsgLabel{{ msg.id }}" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title" id="confirmDeleteMsgLabel{{ msg.id }}">Delete Message</h5>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                      Are you sure you want to delete this message? This cannot be undone.
+                    </div>
+                    <div class="modal-footer">
+                      <form method="post" action="/admin/delete_message">
+                        <input type="hidden" name="message_id" value="{{ msg.id }}">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="tab-pane fade" id="rooms" role="tabpanel" aria-labelledby="rooms-tab">
+      <div class="mb-3">
+        <form method="post" action="/admin/create_room" class="d-flex flex-wrap gap-2 align-items-center">
+          <input type="text" name="room_name" class="form-control" placeholder="New room name" required style="max-width:220px;">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i> Create Room</button>
+        </form>
+      </div>
+      <table class="table table-bordered table-sm mt-3">
+        <thead><tr><th>ID</th><th>Name</th><th>Link</th><th>Created</th></tr></thead>
+        <tbody>
+          {% for room in rooms %}
+          <tr>
+            <td>{{ room.id }}</td>
+            <td>{{ room.name }}</td>
+            <td><a href="/chat/room/{{ room.slug }}" class="btn btn-outline-primary btn-sm">Join</a></td>
+            <td>{{ room.created_at }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+{% endblock %} 

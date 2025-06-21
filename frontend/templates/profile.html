@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .profile-edit-card {
+    background: rgba(35,38,47,0.92);
+    border-radius: 2rem;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(79,140,255,0.15);
+    padding: 2.5rem 2rem;
+    max-width: 420px;
+    margin: auto;
+    z-index: 1;
+  }
+  .form-control {
+    background: rgba(40,44,54,0.98) !important;
+    color: #f8f8f2 !important;
+    border: 1.5px solid #4f8cff66 !important;
+    border-radius: 1.2rem !important;
+    font-size: 1.08rem;
+    font-weight: 500;
+    box-shadow: 0 1px 4px #4f8cff22;
+    caret-color: var(--color-accent) !important;
+  }
+  .form-control:focus {
+    border-color: var(--color-accent) !important;
+    box-shadow: 0 0 0 0.2rem #ff6ec488 !important;
+    background: rgba(40,44,54,1) !important;
+    color: #fff !important;
+  }
+  ::placeholder {
+    color: #e0e0e0 !important;
+    opacity: 1;
+  }
+</style>
+<div class="d-flex align-items-center justify-content-center" style="min-height: 70vh;">
+  <div class="profile-edit-card w-100">
+    <h2 class="mb-4 text-center" style="color:var(--color-primary);font-weight:700;">Edit Profile</h2>
+    {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+      <div class="alert alert-success">{{ success }}</div>
+    {% endif %}
+    <form method="post" autocomplete="off">
+      <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input type="text" class="form-control" id="username" name="username" value="{{ user[0] }}" required>
+      </div>
+      <div class="mb-3">
+        <label for="email" class="form-label">Email</label>
+        <input type="email" class="form-control" id="email" name="email" value="{{ user[1] }}" required>
+      </div>
+      <div class="mb-3">
+        <label for="password" class="form-label">New Password <span class="text-muted small">(leave blank to keep current)</span></label>
+        <input type="password" class="form-control" id="password" name="password" placeholder="New password">
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Update Profile</button>
+    </form>
+  </div>
+</div>
+{% endblock %} 

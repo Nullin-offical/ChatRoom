@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Home - ChatRoom{% endblock %}
+{% block content %}
+<div class="text-center">
+    <h1>Welcome to ChatRoom!</h1>
+    <p class="lead">A real-time chat platform built with Flask, SQLite, and WebSockets.</p>
+    <a href="{{ url_for('login') }}" class="btn btn-primary">Login</a>
+    <a href="{{ url_for('register') }}" class="btn btn-outline-primary">Register</a>
+</div>
+{% endblock %} 

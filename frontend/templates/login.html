@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .auth-card {
+    background: rgba(35,38,47,0.92);
+    border-radius: 2rem;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(79,140,255,0.15);
+    padding: 2.5rem 2rem;
+    max-width: 400px;
+    margin: auto;
+    z-index: 1;
+  }
+  .auth-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: 1.5rem;
+  }
+  .form-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-primary);
+    font-size: 1.2rem;
+  }
+  .form-control {
+    background: rgba(40,44,54,0.98) !important;
+    color: #f8f8f2 !important;
+    border: 1.5px solid #4f8cff66 !important;
+    border-radius: 1.2rem !important;
+    font-size: 1.08rem;
+    font-weight: 500;
+    box-shadow: 0 1px 4px #4f8cff22;
+    caret-color: var(--color-accent) !important;
+  }
+  .form-control:focus {
+    border-color: var(--color-accent) !important;
+    box-shadow: 0 0 0 0.2rem #ff6ec488 !important;
+    background: rgba(40,44,54,1) !important;
+    color: #fff !important;
+  }
+  ::placeholder {
+    color: #e0e0e0 !important;
+    opacity: 1;
+  }
+  .toggle-password {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+</style>
+<div class="d-flex align-items-center justify-content-center" style="min-height: 80vh;">
+  <div class="auth-card">
+    <div class="auth-title text-center mb-4"><i class="bi bi-box-arrow-in-right me-2"></i>Login</div>
+    {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    <form method="post" autocomplete="off">
+      <div class="mb-3 position-relative">
+        <i class="bi bi-person form-icon"></i>
+        <input type="text" class="form-control" id="username" name="username" placeholder="Username" required autofocus>
+      </div>
+      <div class="mb-3 position-relative">
+        <i class="bi bi-lock form-icon"></i>
+        <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
+        <i class="bi bi-eye toggle-password" onclick="togglePassword('password', this)"></i>
+      </div>
+      <button type="submit" class="btn btn-primary w-100 mb-2">Login</button>
+      <a href="/register" class="btn btn-link w-100">Don't have an account? Register</a>
+    </form>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.js"></script>
+<script>
+function togglePassword(id, el) {
+  const input = document.getElementById(id);
+  if (input.type === 'password') {
+    input.type = 'text';
+    el.classList.remove('bi-eye');
+    el.classList.add('bi-eye-slash');
+  } else {
+    input.type = 'password';
+    el.classList.remove('bi-eye-slash');
+    el.classList.add('bi-eye');
+  }
+}
+</script>
+{% endblock %} 
