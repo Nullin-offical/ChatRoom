@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtualenv
+venv/
+ENV/
+.env/
+.venv/
+
+# SQLite database
+backend/db/*.db
+backend/db/*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# IDEs
+.idea/
+.vscode/
+.history/
+
+# Test/coverage
+.coverage
+.tox/
+.pytest_cache/
+
+# Node/npm (if any)
+node_modules/
+
+# Frontend build (if any)
+dist/
+build/
+
+# Deployment scripts (keep, do not ignore)
+!deploy_chatroom.sh
+!deploy_chatroom.bat
+
+# Ignore compiled schema
+backend/models/*.pyc
+
+# Ignore migration leftovers
+backend/migrations/
+
+# Ignore backup files
+*~
+*.bak
+
+# Ignore user-uploaded avatars (if any, otherwise comment this out)
+# frontend/static/avatars/uploads/ 
