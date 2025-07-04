@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  /* Reuse chat styling */
+  .chat-glass {
+    background: rgba(35,38,47,0.92);
+    border-radius: 2rem;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(79,140,255,0.15);
+    padding: 2rem 1.5rem 1rem 1.5rem;
+    max-width: 900px;
+    margin: auto;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    height: 85vh;
+  }
+  #chat-box { flex-grow:1; overflow-y:auto; margin-bottom:1rem; padding:1rem 0.5rem; background:transparent !important; }
+  .chat-input-area{display:flex; gap:0.5rem; align-items:center;}
+  .chat-avatar{width:36px;height:36px;border-radius:50%;background:var(--color-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;margin-right:0.5rem;box-shadow:0 1px 4px #4f8cff44;}
+  .message-row{display:flex;align-items:flex-end;margin-bottom:0.5rem;}
+  .message-row.me{flex-direction:row-reverse;}
+  .message-bubble{margin-bottom:0;border-radius:1.2rem;background:linear-gradient(120deg,#23262f 60%,#4f8cff 100%)!important;color:#f8f8f2!important;box-shadow:0 2px 8px rgba(0,0,0,0.2);max-width:70%;word-break:break-word;padding:0.6rem 1.1rem;font-size:1.08rem;border:1.5px solid #4f8cff44!important;}
+  .message-bubble.me{background:linear-gradient(120deg,#43e97b 0%,#38f9d7 100%)!important;color:#23262f!important;margin-left:auto;border:1.5px solid #43e97b66!important;}
+  .message-meta{font-size:0.85em;color:var(--text-muted);margin-top:0.1rem;margin-left:0.5rem;margin-right:0.5rem;}
+  .form-control,#message-input{background:rgba(40,44,54,0.98)!important;color:#f8f8f2!important;border:1.5px solid #4f8cff66!important;border-radius:1.2rem!important;font-size:1.08rem;font-weight:500;box-shadow:0 1px 4px #4f8cff22;caret-color:var(--color-accent)!important;}
+  .form-control:focus,#message-input:focus{border-color:var(--color-accent)!important;box-shadow:0 0 0 0.2rem #ff6ec488!important;background:rgba(40,44,54,1)!important;color:#fff!important;}
+  ::placeholder{color:#e0e0e0!important;opacity:1;}
+</style>
+<div class="row justify-content-center">
+  <div class="col-12 col-md-10 col-lg-8">
+    <div class="chat-glass mt-4">
+      <h2 class="mb-3"><i class="bi bi-envelope-open me-2"></i>Private Messages</h2>
+      <div class="mb-3">
+        <form id="user-search-form" class="d-flex gap-2" autocomplete="off">
+          <input type="text" id="user-search-input" class="form-control" placeholder="Search username..." value="{{ target_username or '' }}" {% if target_username %}readonly{% endif %} required style="max-width: 300px;">
+          {% if not target_username %}<button class="btn btn-outline-primary" type="submit">Open Chat</button>{% endif %}
+          {% if target_username %}<a href="/pm" class="btn btn-secondary">New Search</a>{% endif %}
+        </form>
+      </div>
+      <div id="chat-box">
+        {% if not target_username %}
+        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+          <h4><i class="bi bi-arrow-left me-2"></i>Search for a user to start private chat.</h4>
+        </div>
+        {% endif %}
+      </div>
+      {% if target_username %}
+      <form id="chat-form" class="chat-input-area mt-2">
+        <input type="text" id="message-input" class="form-control" placeholder="Type your message..." autocomplete="off" required>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i></button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+{% if target_username %}
+<script>
+window.targetUser = '{{ target_username }}';
+</script>
+{% endif %}
+<script src="/static/js/pm.js"></script>
+{% endblock %}

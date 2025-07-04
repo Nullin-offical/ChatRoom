@@ -23,6 +23,7 @@
                     {% if current_user.is_authenticated %}
                         <li class="nav-item"><a class="nav-link" href="/dashboard" aria-label="Dashboard">Dashboard</a></li>
                         <li class="nav-item"><a class="nav-link" href="/chat" aria-label="Chatroom">Chatroom</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/pm" aria-label="Private Messages">PM</a></li>
                         {% if current_user.is_admin %}
                         <li class="nav-item"><a class="nav-link text-warning" href="/admin" aria-label="Admin">Admin</a></li>
                         {% endif %}
@@ -68,6 +69,10 @@
       {% endwith %}
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // Expose the logged-in username to front-end scripts for UI/logic (empty string if not authenticated)
+      window.currentUser = "{{ current_user.username if current_user.is_authenticated else '' }}";
+    </script>
     <script>
       document.querySelectorAll('.toast').forEach(toastEl => {
         new bootstrap.Toast(toastEl, { delay: 4000 }).show();

@@ -21,7 +21,8 @@ function addMessage(msg) {
   }
 
   // Avatar bubble
-  const avatar = document.createElement('div');
+  const avatar = document.createElement('a');
+  avatar.href = `/user/${msg.username}`;
   avatar.className = 'chat-avatar';
   avatar.textContent = msg.username.charAt(0).toUpperCase();
 

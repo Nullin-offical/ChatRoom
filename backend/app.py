@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import os
 from auth import User, register_user, authenticate_user, get_user_by_id
+from auth import get_user_by_username
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import sqlite3
 from datetime import datetime
@@ -348,6 +349,125 @@ def handle_get_chat_history(data):
         ]
         
     emit('chat_history', messages)
+
+# --- Helper for PM room name ---
+
+def _pm_room_name(user1_id, user2_id):
+    """Return deterministic Socket.IO room name for private chat between two user IDs."""
+    uid1, uid2 = sorted([user1_id, user2_id])
+    return f'pm_{uid1}_{uid2}'
+
+# --- User Public Profile ---
+@app.route('/user/<username>')
+@login_required
+def public_profile(username):
+    target_user = get_user_by_username(username)
+    if not target_user:
+        abort(404)
+    is_self = target_user.id == current_user.id
+    return render_template('user_profile.html', target_user=target_user, is_self=is_self)
+
+# --- Private Messaging (PM) ---
+@app.route('/pm')
+@login_required
+def pm_index():
+    """PM landing page with search box."""
+    return render_template('pm.html', target_username=None)
+
+@app.route('/pm/<username>')
+@login_required
+def pm_chat(username):
+    if username == current_user.username:
+        flash('Cannot send private messages to yourself.', 'warning')
+        return redirect(url_for('pm_index'))
+    target_user = get_user_by_username(username)
+    if not target_user:
+        flash('User not found.', 'danger')
+        return redirect(url_for('pm_index'))
+    return render_template('pm.html', target_username=target_user.username)
+
+# --- API: Search Users ---
+@app.route('/api/search_users')
+@login_required
+def api_search_users():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT username FROM users WHERE username LIKE ? AND username != ? LIMIT 20', (f'%{q}%', current_user.username))
+        results = [row[0] for row in cur.fetchall()]
+    return jsonify(results)
+
+# --- SocketIO events for Private Messaging ---
+@socketio.on('join_pm')
+@login_required
+def handle_join_pm(data):
+    username = data.get('username')
+    target_user = get_user_by_username(username)
+    if not target_user:
+        return
+    room_name = _pm_room_name(current_user.id, target_user.id)
+    join_room(room_name)
+    print(f'{current_user.username} joined private room {room_name}')
+
+@socketio.on('leave_pm')
+@login_required
+def handle_leave_pm(data):
+    username = data.get('username')
+    target_user = get_user_by_username(username)
+    if not target_user:
+        return
+    room_name = _pm_room_name(current_user.id, target_user.id)
+    leave_room(room_name)
+
+@socketio.on('send_pm')
+@login_required
+def handle_send_pm(data):
+    content = data.get('content', '').strip()
+    receiver_username = data.get('receiver_username')
+    if not content or not receiver_username:
+        return
+    receiver = get_user_by_username(receiver_username)
+    if not receiver or receiver.id == current_user.id:
+        return
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            'INSERT INTO private_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)',
+            (current_user.id, receiver.id, content)
+        )
+        msg_id = cur.lastrowid
+        conn.commit()
+        cur.execute('''SELECT content, timestamp FROM private_messages WHERE id=?''', (msg_id,))
+        row = cur.fetchone()
+        message = {
+            'username': current_user.username,
+            'content': row[0],
+            'timestamp': row[1]
+        }
+    room_name = _pm_room_name(current_user.id, receiver.id)
+    socketio.emit('new_pm', message, room=room_name)
+
+@socketio.on('get_pm_history')
+@login_required
+def handle_get_pm_history(data):
+    username = data.get('username')
+    target_user = get_user_by_username(username)
+    if not target_user:
+        emit('pm_history', [])
+        return
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute('''SELECT sender_id, content, timestamp FROM private_messages 
+                       WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
+                       ORDER BY timestamp ASC''',
+                    (current_user.id, target_user.id, target_user.id, current_user.id))
+        messages = []
+        for sender_id, content, timestamp in cur.fetchall():
+            sender_name = current_user.username if sender_id == current_user.id else target_user.username
+            messages.append({'username': sender_name, 'content': content, 'timestamp': timestamp})
+    emit('pm_history', messages)
 
 # --- Main Entrypoint ---
 if __name__ == '__main__':
