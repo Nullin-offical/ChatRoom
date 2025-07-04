@@ -58,6 +58,18 @@ def init_db():
                 cur.execute('UPDATE rooms SET slug=? WHERE id=?', (slug, room_id))
             conn.commit()
             print('Room slugs migrated.')
+        # Ensure private_messages table exists (migration for PM feature)
+        cur.execute('''CREATE TABLE IF NOT EXISTS private_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER NOT NULL,
+            receiver_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+        )''')
+        conn.commit()
+        print('Private messages table ensured.')
         conn.close()
 
 if __name__ == '__main__':

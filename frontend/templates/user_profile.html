@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex flex-column align-items-center justify-content-center text-center" style="min-height:60vh;">
+  <div class="card bg-dark text-light p-4" style="border-radius:1.5rem; border:1px solid #4f8cff55; max-width:400px; width:100%;">
+    <div class="mx-auto mb-3" style="width:80px; height:80px; border-radius:50%; background:var(--color-primary); display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:700;">
+      {{ target_user.username[0]|upper }}
+    </div>
+    <h3 class="mb-1">{{ target_user.username }}</h3>
+    <p class="text-muted mb-3">User Profile</p>
+    {% if not is_self %}
+    <a href="/pm/{{ target_user.username }}" class="btn btn-primary"><i class="bi bi-chat-dots me-1"></i> Send Private Message</a>
+    {% else %}
+    <a href="/profile" class="btn btn-secondary"><i class="bi bi-gear"></i> Edit My Profile</a>
+    {% endif %}
+  </div>
+</div>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+{% endblock %}
