@@ -9,9 +9,15 @@ import sqlite3
 from datetime import datetime
 from functools import wraps
 import re
-from utils import slugify
 import glob
 from security import security_manager, check_message_security, sanitize_user_input, log_security_event
+
+def slugify(value):
+    value = str(value)
+    value = value.strip().lower()
+    value = re.sub(r'[^a-z0-9\u0600-\u06FF]+', '-', value)
+    value = re.sub(r'-+', '-', value)
+    return value.strip('-')
 
 # --- App Config ---
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')

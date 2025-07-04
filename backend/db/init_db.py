@@ -2,7 +2,6 @@ import sqlite3
 import os
 import bcrypt
 import re
-from utils import slugify
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'chatroom.db')
@@ -13,6 +12,13 @@ DEFAULT_ADMIN = {
     'email': 'shayan@gmail.com',
     'password': 'shayan.1400'
 }
+
+def slugify(value):
+    value = str(value)
+    value = value.strip().lower()
+    value = re.sub(r'[^a-z0-9\u0600-\u06FF]+', '-', value)
+    value = re.sub(r'-+', '-', value)
+    return value.strip('-')
 
 def init_db():
     if not os.path.exists(DB_PATH):
