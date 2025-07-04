@@ -6,12 +6,18 @@ import bcrypt
 DB_PATH = os.path.join(os.path.dirname(__file__), 'db', 'chatroom.db')
 
 class User(UserMixin):
-    def __init__(self, id, username, email, hashed_password, is_admin):
+    def __init__(self, id, username, email, hashed_password, is_admin, created_at=None, 
+                 display_name=None, bio=None, birth_date=None, profile_image=None):
         self.id = id
         self.username = username
         self.email = email
         self.hashed_password = hashed_password
         self.is_admin = is_admin
+        self.created_at = created_at or "2024-01-01"  # Default fallback
+        self.display_name = display_name or username
+        self.bio = bio or ""
+        self.birth_date = birth_date
+        self.profile_image = profile_image
 
     @staticmethod
     def get(user_id):
@@ -20,7 +26,8 @@ class User(UserMixin):
 def get_user_by_id(user_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute('SELECT id, username, email, hashed_password, is_admin FROM users WHERE id = ?', (user_id,))
+    cur.execute('''SELECT id, username, email, hashed_password, is_admin, created_at, 
+                   display_name, bio, birth_date, profile_image FROM users WHERE id = ?''', (user_id,))
     row = cur.fetchone()
     conn.close()
     if row:
@@ -30,7 +37,8 @@ def get_user_by_id(user_id):
 def get_user_by_username(username):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute('SELECT id, username, email, hashed_password, is_admin FROM users WHERE username = ?', (username,))
+    cur.execute('''SELECT id, username, email, hashed_password, is_admin, created_at, 
+                   display_name, bio, birth_date, profile_image FROM users WHERE username = ?''', (username,))
     row = cur.fetchone()
     conn.close()
     if row:

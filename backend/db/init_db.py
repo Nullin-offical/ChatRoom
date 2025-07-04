@@ -70,6 +70,14 @@ def init_db():
         )''')
         conn.commit()
         print('Private messages table ensured.')
+        
+        # MIGRATION: Add password column to rooms table if not exists
+        cur.execute('PRAGMA table_info(rooms)')
+        columns = [col[1] for col in cur.fetchall()]
+        if 'password' not in columns:
+            cur.execute('ALTER TABLE rooms ADD COLUMN password TEXT')
+            conn.commit()
+            print('Password column added to rooms table.')
         conn.close()
 
 if __name__ == '__main__':

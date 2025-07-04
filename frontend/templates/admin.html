@@ -1,195 +1,470 @@
 {% extends 'base.html' %}
+
+{% block title %}Admin Panel - ChatRoom{% endblock %}
+
 {% block content %}
-<style>
-  .admin-glass {
-    background: rgba(35,38,47,0.92);
-    border-radius: 2rem;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-    backdrop-filter: blur(8px);
-    border: 1.5px solid rgba(79,140,255,0.15);
-    padding: 2.5rem 2rem;
-    margin: auto;
-    z-index: 1;
-  }
-  .tab-content {
-    margin-top: 1.5rem;
-  }
-  .admin-avatar {
-    width: 32px; height: 32px;
-    border-radius: 50%;
-    background: var(--color-primary);
-    color: #fff;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 1.1rem;
-    font-weight: 700;
-    margin-right: 0.5rem;
-    box-shadow: 0 1px 4px #4f8cff44;
-  }
-  .admin-badge-admin {
-    background: var(--color-accent);
-    color: #23262f;
-    font-weight: 600;
-    border-radius: 0.7rem;
-    padding: 0.2rem 0.7rem;
-    font-size: 0.95rem;
-    margin-left: 0.5rem;
-  }
-  .form-control {
-    background: rgba(40,44,54,0.98) !important;
-    color: #f8f8f2 !important;
-    border: 1.5px solid #4f8cff66 !important;
-    border-radius: 1.2rem !important;
-    font-size: 1.08rem;
-    font-weight: 500;
-    box-shadow: 0 1px 4px #4f8cff22;
-    caret-color: var(--color-accent) !important;
-  }
-  .form-control:focus {
-    border-color: var(--color-accent) !important;
-    box-shadow: 0 0 0 0.2rem #ff6ec488 !important;
-    background: rgba(40,44,54,1) !important;
-    color: #fff !important;
-  }
-  ::placeholder {
-    color: #e0e0e0 !important;
-    opacity: 1;
-  }
-  .table, .table th, .table td {
-    background: rgba(30, 34, 44, 0.98) !important;
-    color: #f8f8f2 !important;
-    border-color: #4f8cff22 !important;
-  }
-  .modal-content {
-    background: rgba(30, 34, 44, 0.97) !important;
-    color: #f8f8f2 !important;
-    border-radius: 1.2rem !important;
-    border: 1.5px solid #4f8cff22 !important;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-    backdrop-filter: blur(14px);
-  }
-  .modal-backdrop.show {
-    opacity: 0.7 !important;
-  }
-</style>
-<div class="admin-glass mt-4">
-  <h2 class="mb-4"><i class="bi bi-shield-lock me-2"></i>Admin Panel</h2>
-  <ul class="nav nav-tabs" id="adminTab" role="tablist">
-    <li class="nav-item" role="presentation">
-      <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab" aria-controls="users" aria-selected="true"><i class="bi bi-people me-1"></i>Users</button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-1"></i>Messages</button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link" id="rooms-tab" data-bs-toggle="tab" data-bs-target="#rooms" type="button" role="tab" aria-controls="rooms" aria-selected="false"><i class="bi bi-door-open me-1"></i>Rooms</button>
-    </li>
-  </ul>
-  <div class="tab-content" id="adminTabContent">
-    <div class="tab-pane fade show active" id="users" role="tabpanel" aria-labelledby="users-tab">
-      <table class="table table-bordered table-sm mt-3">
-        <thead><tr><th></th><th>ID</th><th>Username</th><th>Email</th><th>Admin</th><th>Action</th></tr></thead>
-        <tbody>
-          {% for user in users %}
-          <tr>
-            <td><span class="admin-avatar"><i class="bi bi-person"></i></span></td>
-            <td>{{ user.id }}</td>
-            <td>{{ user.username }} {% if user.is_admin %}<span class="admin-badge-admin">admin</span>{% endif %}</td>
-            <td>{{ user.email }}</td>
-            <td>{% if user.is_admin %}✔️{% endif %}</td>
-            <td>
-              {% if user.id != current_user.id %}
-              <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmDeleteUser{{ user.id }}"><i class="bi bi-trash"></i></button>
-              <!-- Modal -->
-              <div class="modal fade" id="confirmDeleteUser{{ user.id }}" tabindex="-1" aria-labelledby="confirmDeleteUserLabel{{ user.id }}" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered">
-                  <div class="modal-content">
-                    <div class="modal-header">
-                      <h5 class="modal-title" id="confirmDeleteUserLabel{{ user.id }}">Delete User</h5>
-                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                      Are you sure you want to delete user <strong>{{ user.username }}</strong>? This cannot be undone.
-                    </div>
-                    <div class="modal-footer">
-                      <form method="post" action="/admin/delete_user">
-                        <input type="hidden" name="user_id" value="{{ user.id }}">
-                        <button type="submit" class="btn btn-danger">Delete</button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                      </form>
-                    </div>
-                  </div>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="bi bi-shield-lock me-2 text-warning"></i>Admin Panel
+                    </h2>
+                    <p class="text-secondary mb-0">Manage users, messages, and rooms</p>
                 </div>
-              </div>
-              {% else %}
-              <span class="text-muted">(You)</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <div class="tab-pane fade" id="messages" role="tabpanel" aria-labelledby="messages-tab">
-      <table class="table table-bordered table-sm mt-3">
-        <thead><tr><th>ID</th><th>User</th><th>Content</th><th>Time</th><th>Action</th></tr></thead>
-        <tbody>
-          {% for msg in messages %}
-          <tr>
-            <td>{{ msg.id }}</td>
-            <td>{{ msg.username }}</td>
-            <td>{{ msg.content }}</td>
-            <td>{{ msg.timestamp }}</td>
-            <td>
-              <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmDeleteMsg{{ msg.id }}"><i class="bi bi-trash"></i></button>
-              <!-- Modal -->
-              <div class="modal fade" id="confirmDeleteMsg{{ msg.id }}" tabindex="-1" aria-labelledby="confirmDeleteMsgLabel{{ msg.id }}" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered">
-                  <div class="modal-content">
-                    <div class="modal-header">
-                      <h5 class="modal-title" id="confirmDeleteMsgLabel{{ msg.id }}">Delete Message</h5>
-                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                      Are you sure you want to delete this message? This cannot be undone.
-                    </div>
-                    <div class="modal-footer">
-                      <form method="post" action="/admin/delete_message">
-                        <input type="hidden" name="message_id" value="{{ msg.id }}">
-                        <button type="submit" class="btn btn-danger">Delete</button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                      </form>
-                    </div>
-                  </div>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-success">Online</span>
+                    <span class="badge bg-primary">{{ users|length }} Users</span>
                 </div>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+            </div>
+
+            <!-- Site Name Edit Card -->
+            <div class="card mb-4">
+                <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-pencil-square me-2 text-primary"></i>
+                    <strong>Edit Site Name</strong>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/admin/site_name" class="row g-2 align-items-center">
+                        <div class="col-md-6">
+                            <label for="siteNameInput" class="form-label mb-1">Site Name</label>
+                            <input type="text" class="form-control" id="siteNameInput" name="site_name" value="{{ site_name }}" maxlength="64" required>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary mt-3 mt-md-0">
+                                <i class="bi bi-save me-1"></i>Save
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <ul class="nav nav-tabs mb-4" id="adminTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">
+                        <i class="bi bi-people me-2"></i>Users
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab">
+                        <i class="bi bi-chat-dots me-2"></i>Messages
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="rooms-tab" data-bs-toggle="tab" data-bs-target="#rooms" type="button" role="tab">
+                        <i class="bi bi-door-open me-2"></i>Rooms
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="adminTabContent">
+                <!-- Users Tab -->
+                <div class="tab-pane fade show active" id="users" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-people me-2"></i>User Management
+                            </h5>
+                            <span class="badge bg-primary">{{ users|length }} total users</span>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 50px;"></th>
+                                            <th>ID</th>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                            <th>Role</th>
+                                            <th style="width: 100px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for user in users %}
+                                        <tr>
+                                            <td>
+                                                <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center">
+                                                    <i class="bi bi-person text-white"></i>
+                                                </div>
+                                            </td>
+                                            <td><span class="badge bg-secondary">#{{ user.id }}</span></td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <strong>{{ user.username }}</strong>
+                                                    {% if user.is_admin %}
+                                                    <span class="badge bg-warning text-dark ms-2">Admin</span>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                            <td>{{ user.email }}</td>
+                                            <td>
+                                                {% if user.is_admin %}
+                                                <span class="badge bg-warning text-dark">Administrator</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary">User</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if user.id != current_user.id %}
+                                                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal{{ user.id }}">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                                {% else %}
+                                                <span class="text-muted small">(You)</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messages Tab -->
+                <div class="tab-pane fade" id="messages" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-chat-dots me-2"></i>Message Management
+                            </h5>
+                            <span class="badge bg-primary">{{ messages|length }} total messages</span>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>User</th>
+                                            <th>Message</th>
+                                            <th>Time</th>
+                                            <th style="width: 100px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for msg in messages %}
+                                        <tr>
+                                            <td><span class="badge bg-secondary">#{{ msg.id }}</span></td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center me-2">
+                                                        <i class="bi bi-person text-white"></i>
+                                                    </div>
+                                                    <strong>{{ msg.username }}</strong>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="text-truncate" style="max-width: 300px;" title="{{ msg.content }}">
+                                                    {{ msg.content }}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ msg.timestamp }}</small>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteMessageModal{{ msg.id }}">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rooms Tab -->
+                <div class="tab-pane fade" id="rooms" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-door-open me-2"></i>Room Management
+                            </h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createRoomModal">
+                                <i class="bi bi-plus-circle me-1"></i>Create Room
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Security</th>
+                                            <th>Status</th>
+                                            <th>Created</th>
+                                            <th style="width: 150px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for room in rooms %}
+                                        <tr {% if room.hidden %}class="table-secondary"{% endif %}>
+                                            <td><span class="badge bg-secondary">#{{ room.id }}</span></td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="avatar-sm {% if room.hidden %}bg-secondary{% else %}bg-success{% endif %} rounded-circle d-flex align-items-center justify-content-center me-2">
+                                                        <i class="bi bi-chat text-white"></i>
+                                                    </div>
+                                                    <strong>{{ room.name }}</strong>
+                                                    {% if room.hidden %}
+                                                    <span class="badge bg-secondary ms-2">Hidden</span>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                {% if room.has_password %}
+                                                <span class="badge bg-warning text-dark">
+                                                    <i class="bi bi-lock me-1"></i>Protected
+                                                </span>
+                                                {% else %}
+                                                <span class="badge bg-success">
+                                                    <i class="bi bi-unlock me-1"></i>Public
+                                                </span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if room.hidden %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="bi bi-eye-slash me-1"></i>Hidden
+                                                </span>
+                                                {% else %}
+                                                <span class="badge bg-success">
+                                                    <i class="bi bi-eye me-1"></i>Visible
+                                                </span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ room.created_at }}</small>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex gap-1">
+                                                    <a href="/chat/room/{{ room.slug }}" class="btn btn-sm btn-outline-primary">
+                                                        <i class="bi bi-arrow-right"></i>
+                                                    </a>
+                                                    <form method="post" action="/admin/toggle_room_visibility" class="d-inline">
+                                                        <input type="hidden" name="room_id" value="{{ room.id }}">
+                                                        <button type="submit" class="btn btn-sm {% if room.hidden %}btn-outline-success{% else %}btn-outline-warning{% endif %}" 
+                                                                title="{% if room.hidden %}Show room{% else %}Hide room{% endif %}">
+                                                            <i class="bi {% if room.hidden %}bi-eye{% else %}bi-eye-slash{% endif %}"></i>
+                                                        </button>
+                                                    </form>
+                                                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteRoomModal{{ room.id }}">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="tab-pane fade" id="rooms" role="tabpanel" aria-labelledby="rooms-tab">
-      <div class="mb-3">
-        <form method="post" action="/admin/create_room" class="d-flex flex-wrap gap-2 align-items-center">
-          <input type="text" name="room_name" class="form-control" placeholder="New room name" required style="max-width:220px;">
-          <button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i> Create Room</button>
-        </form>
-      </div>
-      <table class="table table-bordered table-sm mt-3">
-        <thead><tr><th>ID</th><th>Name</th><th>Link</th><th>Created</th></tr></thead>
-        <tbody>
-          {% for room in rooms %}
-          <tr>
-            <td>{{ room.id }}</td>
-            <td>{{ room.name }}</td>
-            <td><a href="/chat/room/{{ room.slug }}" class="btn btn-outline-primary btn-sm">Join</a></td>
-            <td>{{ room.created_at }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
 </div>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+<!-- Create Room Modal -->
+<div class="modal fade" id="createRoomModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-plus-circle me-2"></i>Create New Room
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/admin/create_room">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="room_name" class="form-label">Room Name</label>
+                        <input type="text" class="form-control" id="room_name" name="room_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="room_password" class="form-label">Password (Optional)</label>
+                        <input type="password" class="form-control" id="room_password" name="room_password" placeholder="Leave empty for public room">
+                        <div class="form-text">If set, users will need password to join this room</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-1"></i>Create Room
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete User Modals -->
+{% for user in users %}
+{% if user.id != current_user.id %}
+<div class="modal fade" id="deleteUserModal{{ user.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Delete User
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete user <strong>{{ user.username }}</strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    This action cannot be undone. All user data will be permanently deleted.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="/admin/delete_user" class="d-inline">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Delete User
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<!-- Delete Room Modals -->
+{% for room in rooms %}
+<div class="modal fade" id="deleteRoomModal{{ room.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Delete Room
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete room <strong>{{ room.name }}</strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    This action cannot be undone. All messages in this room will be permanently deleted.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="/admin/delete_room" class="d-inline">
+                    <input type="hidden" name="room_id" value="{{ room.id }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Delete Room
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- Delete Message Modals -->
+{% for msg in messages %}
+<div class="modal fade" id="deleteMessageModal{{ msg.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Delete Message
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this message?</p>
+                <div class="alert alert-secondary">
+                    <strong>{{ msg.username }}:</strong> {{ msg.content }}
+                </div>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    This action cannot be undone.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="/admin/delete_message" class="d-inline">
+                    <input type="hidden" name="message_id" value="{{ msg.id }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Delete Message
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<style>
+    .bg-primary{
+        padding: 2%;
+    }
+    .mb-0{
+        color: var(--text-primary);
+    }
+.avatar-sm {
+    width: 32px;
+    height: 32px;
+    font-size: 0.875rem;
+}
+
+.nav-tabs .nav-link {
+    color: var(--text-secondary);
+    border: none;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    transition: var(--transition-fast);
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--text-primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--primary-color);
+    background: var(--bg-card);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+.modal-dialog-centered {
+    display: flex;
+    align-items: center;
+    min-height: calc(100% - 1rem);
+}
+
+@media (max-width: 768px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .avatar-sm {
+        width: 28px;
+        height: 28px;
+        font-size: 0.75rem;
+    }
+}
+</style>
 {% endblock %} 

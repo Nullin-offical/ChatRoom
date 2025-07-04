@@ -1,18 +1,144 @@
 {% extends 'base.html' %}
+{% block title %}Edit Profile - ChatRoom{% endblock %}
+
 {% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg border-0" style="background: rgba(35,38,47,0.92); border-radius: 1.5rem; border: 1.5px solid rgba(79,140,255,0.15);">
+                <div class="card-header bg-transparent border-0 text-center py-4">
+                    <h2 class="mb-0" style="color: var(--color-primary); font-weight: 700;">
+                        <i class="bi bi-person-gear me-2"></i>Edit Profile
+                    </h2>
+                </div>
+                
+                <div class="card-body p-4">
+                    {% if error %}
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endif %}
+                    {% if success %}
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="bi bi-check-circle me-2"></i>{{ success }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endif %}
+
+                    <form method="post" enctype="multipart/form-data" autocomplete="off">
+                        <!-- Avatar Picker Section -->
+                        <div class="text-center mb-4">
+                            <label class="form-label mb-2" style="font-weight:600;">انتخاب آواتار</label>
+                            <div class="d-flex flex-wrap justify-content-center gap-3 mb-2">
+                                <!-- None option -->
+                                <label class="avatar-option">
+                                    <input type="radio" name="profile_avatar" value="" {% if not user.profile_image %}checked{% endif %}>
+                                    <div class="avatar-preview rounded-circle d-flex align-items-center justify-content-center" style="background:var(--color-primary);width:80px;height:80px;">
+                                        <span style="font-size:2.5rem;color:#fff;">?</span>
+                                    </div>
+                                    <div class="small text-muted mt-1">هیچکدام</div>
+                                </label>
+                                {% for avatar in avatars %}
+                                <label class="avatar-option">
+                                    <input type="radio" name="profile_avatar" value="{{ avatar }}" {% if user.profile_image == avatar %}checked{% endif %}>
+                                    <div class="avatar-preview rounded-circle overflow-hidden d-flex align-items-center justify-content-center" style="width:80px;height:80px;background:#fff;border:2px solid #4f8cff33;">
+                                        <img src="{{ avatar }}" alt="avatar" style="width:100%;height:100%;object-fit:cover;">
+                                    </div>
+                                    <div class="small text-muted mt-1">آواتار {{ loop.index }}</div>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            <small class="text-muted">یکی از آواتارهای آماده را انتخاب کنید یا هیچکدام (پیش‌فرض)</small>
+                        </div>
+                        <style>
+                        .avatar-option { display:inline-flex; flex-direction:column; align-items:center; cursor:pointer; }
+                        .avatar-option input[type=radio] { display:none; }
+                        .avatar-option .avatar-preview { border:2px solid transparent; transition:0.2s; }
+                        .avatar-option input[type=radio]:checked + .avatar-preview { border:2.5px solid var(--color-accent); box-shadow:0 0 0 2px #4f8cff44; }
+                        </style>
+
+                        <div class="row">
+                            <!-- Basic Information -->
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">
+                                        <i class="bi bi-person me-1"></i>Username
+                                    </label>
+                                    <input type="text" class="form-control" id="username" name="username" 
+                                           value="{{ user.username }}" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="display_name" class="form-label">
+                                        <i class="bi bi-card-text me-1"></i>Display Name
+                                    </label>
+                                    <input type="text" class="form-control" id="display_name" name="display_name" 
+                                           value="{{ user.display_name }}" placeholder="How others will see your name">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">
+                                        <i class="bi bi-envelope me-1"></i>Email
+                                    </label>
+                                    <input type="email" class="form-control" id="email" name="email" 
+                                           value="{{ user.email }}" required>
+                                </div>
+                            </div>
+                            
+                            <!-- Additional Information -->
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="birth_date" class="form-label">
+                                        <i class="bi bi-calendar me-1"></i>Birth Date (Optional)
+                                    </label>
+                                    <input type="date" class="form-control" id="birth_date" name="birth_date" 
+                                           value="{{ user.birth_date }}">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        <i class="bi bi-clock me-1"></i>Member Since
+                                    </label>
+                                    <input type="text" class="form-control" value="{{ user.created_at }}" readonly 
+                                           style="background: rgba(40,44,54,0.5);">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">
+                                        <i class="bi bi-lock me-1"></i>New Password
+                                    </label>
+                                    <input type="password" class="form-control" id="password" name="password" 
+                                           placeholder="Leave blank to keep current password">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Bio Section -->
+                        <div class="mb-4">
+                            <label for="bio" class="form-label">
+                                <i class="bi bi-chat-quote me-1"></i>Bio (Optional)
+                            </label>
+                            <textarea class="form-control" id="bio" name="bio" rows="4" 
+                                      placeholder="Tell others about yourself...">{{ user.bio }}</textarea>
+                            <div class="form-text">Share a bit about yourself with other users</div>
+                        </div>
+                        
+                        <!-- Submit Button -->
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary btn-lg px-5">
+                                <i class="bi bi-check-circle me-2"></i>Update Profile
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
-  .profile-edit-card {
-    background: rgba(35,38,47,0.92);
-    border-radius: 2rem;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-    backdrop-filter: blur(8px);
-    border: 1.5px solid rgba(79,140,255,0.15);
-    padding: 2.5rem 2rem;
-    max-width: 420px;
-    margin: auto;
-    z-index: 1;
-  }
-  .form-control {
+.form-control {
     background: rgba(40,44,54,0.98) !important;
     color: #f8f8f2 !important;
     border: 1.5px solid #4f8cff66 !important;
@@ -21,42 +147,96 @@
     font-weight: 500;
     box-shadow: 0 1px 4px #4f8cff22;
     caret-color: var(--color-accent) !important;
-  }
-  .form-control:focus {
+    padding: 0.75rem 1rem;
+}
+
+.form-control:focus {
     border-color: var(--color-accent) !important;
     box-shadow: 0 0 0 0.2rem #ff6ec488 !important;
     background: rgba(40,44,54,1) !important;
     color: #fff !important;
-  }
-  ::placeholder {
+}
+
+.form-control:read-only {
+    background: rgba(40,44,54,0.5) !important;
+    color: #a0a0a0 !important;
+}
+
+.form-label {
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.form-text {
+    color: #a0a0a0;
+    font-size: 0.875rem;
+}
+
+::placeholder {
     color: #e0e0e0 !important;
     opacity: 1;
-  }
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+    border: none;
+    border-radius: 1.2rem;
+    font-weight: 600;
+    padding: 0.75rem 2rem;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(79,140,255,0.3);
+}
+
+.alert {
+    border-radius: 1rem;
+    border: none;
+    font-weight: 500;
+}
+
+#profile-image-preview {
+    transition: all 0.3s ease;
+}
+
+#profile-image-preview:hover {
+    transform: scale(1.05);
+    border-color: var(--color-accent);
+}
+
+@media (max-width: 768px) {
+    .col-md-6 {
+        margin-bottom: 1rem;
+    }
+}
 </style>
-<div class="d-flex align-items-center justify-content-center" style="min-height: 70vh;">
-  <div class="profile-edit-card w-100">
-    <h2 class="mb-4 text-center" style="color:var(--color-primary);font-weight:700;">Edit Profile</h2>
-    {% if error %}
-      <div class="alert alert-danger">{{ error }}</div>
-    {% endif %}
-    {% if success %}
-      <div class="alert alert-success">{{ success }}</div>
-    {% endif %}
-    <form method="post" autocomplete="off">
-      <div class="mb-3">
-        <label for="username" class="form-label">Username</label>
-        <input type="text" class="form-control" id="username" name="username" value="{{ user[0] }}" required>
-      </div>
-      <div class="mb-3">
-        <label for="email" class="form-label">Email</label>
-        <input type="email" class="form-control" id="email" name="email" value="{{ user[1] }}" required>
-      </div>
-      <div class="mb-3">
-        <label for="password" class="form-label">New Password <span class="text-muted small">(leave blank to keep current)</span></label>
-        <input type="password" class="form-control" id="password" name="password" placeholder="New password">
-      </div>
-      <button type="submit" class="btn btn-primary w-100">Update Profile</button>
-    </form>
-  </div>
-</div>
+
+<script>
+// Profile image preview functionality
+document.getElementById('profile_image').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('profile-image-preview');
+            preview.innerHTML = `<img src="${e.target.result}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover;">`;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// Auto-dismiss alerts after 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(alert => {
+        setTimeout(() => {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }, 5000);
+    });
+});
+</script>
 {% endblock %} 

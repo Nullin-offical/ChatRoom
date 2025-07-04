@@ -1,5 +1,16 @@
-Flask==2.3.2
+Flask==2.3.3
 Flask-SocketIO==5.3.6
 Flask-Login==0.6.3
-Flask-Cors==4.0.0
-bcrypt==4.1.2 
+Flask-CORS==4.0.0
+Werkzeug==2.3.7
+python-socketio==5.9.0
+python-engineio==4.7.1
+eventlet==0.33.3
+# Security packages
+Flask-Limiter==3.5.0
+Flask-Talisman==1.1.0
+PyJWT==2.8.0
+cryptography==41.0.7
+# Additional security
+bleach==6.1.0
+markupsafe==2.1.3 

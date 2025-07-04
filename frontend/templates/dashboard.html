@@ -1,69 +1,329 @@
 {% extends 'base.html' %}
+
+{% block title %}Dashboard - ChatRoom{% endblock %}
+
 {% block content %}
-<style>
-  .profile-card {
-    background: rgba(35,38,47,0.97) !important;
-    color: #f8f8f2 !important;
-    border-radius: 2rem !important;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-    border: 1.5px solid #4f8cff22 !important;
-    backdrop-filter: blur(12px);
-    padding: 2.5rem 2rem;
-    max-width: 420px;
-    margin: auto;
-    z-index: 1;
-  }
-  .avatar {
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    background: var(--color-primary);
-    color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0 auto 1rem auto;
-    box-shadow: 0 2px 12px #4f8cff44;
-  }
-  .badge-list {
-    display: flex; flex-wrap: wrap; gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
-  .badge-room, .badge-user {
-    background: #23262f !important;
-    color: var(--color-primary) !important;
-    border-radius: 1rem !important;
-    padding: 0.5rem 1rem;
-    font-size: 1rem;
-    box-shadow: 0 1px 4px #4f8cff22 !important;
-  }
-</style>
-<div class="row justify-content-center">
-  <div class="col-lg-5 mb-4">
-    <div class="profile-card text-center">
-      <div class="avatar mb-2">
-        <i class="bi bi-person-circle"></i>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard
+                    </h2>
+                    <p class="text-secondary mb-0">Welcome back, {{ current_user.username }}!</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-success">Active</span>
+                    <span class="badge bg-primary">{{ rooms|length }} Rooms</span>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="avatar-lg bg-primary rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-people text-white" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <h4 class="mb-1">{{ users|length }}</h4>
+                                    <p class="text-muted mb-0">Total Users</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="avatar-lg bg-success rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-chat-dots text-white" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <h4 class="mb-1">{{ messages|length }}</h4>
+                                    <p class="text-muted mb-0">Total Messages</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="avatar-lg bg-warning rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-door-open text-white" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <h4 class="mb-1">{{ rooms|length }}</h4>
+                                    <p class="text-muted mb-0">Active Rooms</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="avatar-lg bg-info rounded-circle d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-clock text-white" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <h4 class="mb-1">{{ current_user.created_at.split(' ')[0] }}</h4>
+                                    <p class="text-muted mb-0">Member Since</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-lightning me-2"></i>Quick Actions
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <a href="/chat" class="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2">
+                                        <i class="bi bi-chat-dots"></i>
+                                        Join Chat
+                                    </a>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <a href="/pm" class="btn btn-success w-100 d-flex align-items-center justify-content-center gap-2">
+                                        <i class="bi bi-envelope"></i>
+                                        Private Messages
+                                    </a>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <a href="/profile" class="btn btn-info w-100 d-flex align-items-center justify-content-center gap-2">
+                                        <i class="bi bi-person"></i>
+                                        My Profile
+                                    </a>
+                                </div>
+                                {% if current_user.is_admin %}
+                                <div class="col-md-3 mb-3">
+                                    <a href="/admin" class="btn btn-warning w-100 d-flex align-items-center justify-content-center gap-2">
+                                        <i class="bi bi-shield-lock"></i>
+                                        Admin Panel
+                                    </a>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="row">
+                <div class="col-md-8 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-activity me-2"></i>Recent Messages
+                            </h5>
+                            <a href="/chat" class="btn btn-sm btn-outline-primary">View All</a>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th>Message</th>
+                                            <th>Room</th>
+                                            <th>Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for msg in recent_messages %}
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center me-2">
+                                                        <i class="bi bi-person text-white"></i>
+                                                    </div>
+                                                    <strong>{{ msg.username }}</strong>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="text-truncate" style="max-width: 200px;" title="{{ msg.content }}">
+                                                    {{ msg.content }}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary">{{ msg.room_name }}</span>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ msg.timestamp }}</small>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-door-open me-2"></i>Active Rooms
+                            </h5>
+                            <span class="badge bg-primary">{{ rooms|length }}</span>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="list-group list-group-flush">
+                                {% for room in rooms %}
+                                <a href="/chat/room/{{ room.slug }}" class="list-group-item list-group-item-action">
+                                    <div class="d-flex align-items-center">
+                                        <div class="flex-shrink-0">
+                                            <div class="avatar-sm bg-success rounded-circle d-flex align-items-center justify-content-center">
+                                                <i class="bi bi-chat text-white"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <h6 class="mb-1 room-name">{{ room.name }}</h6>
+                                            <small class="text-muted">
+                                                {% if room.has_password %}
+                                                <i class="bi bi-lock me-1"></i>Protected
+                                                {% else %}
+                                                <i class="bi bi-unlock me-1"></i>Public
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        <div class="flex-shrink-0">
+                                            <i class="bi bi-arrow-right text-muted"></i>
+                                        </div>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Activity -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-graph-up me-2"></i>Your Activity
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 text-center mb-3">
+                                    <div class="p-3">
+                                        <h3 class="text-primary mb-2">{{ user_message_count }}</h3>
+                                        <p class="text-muted mb-0">Messages Sent</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 text-center mb-3">
+                                    <div class="p-3">
+                                        <h3 class="text-success mb-2">{{ user_rooms_joined }}</h3>
+                                        <p class="text-muted mb-0">Rooms Joined</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 text-center mb-3">
+                                    <div class="p-3">
+                                        <h3 class="text-info mb-2">{{ user_pm_count }}</h3>
+                                        <p class="text-muted mb-0">Private Messages</p>
+                                    </div>
       </div>
-      <h3 class="mb-1">{{ current_user.username }}</h3>
-      <div class="text-muted mb-2">{{ current_user.email }}</div>
-      <span class="badge bg-success mb-2">Online</span>
     </div>
   </div>
-  <div class="col-lg-7">
-    <div class="mb-4">
-      <h4 class="text-accent mb-2"><i class="bi bi-chat-dots me-2"></i>Active Rooms</h4>
-      <div id="room-list" class="badge-list flex-wrap">
-        <!-- Real-time rooms will be injected here by JS -->
       </div>
     </div>
-    <div>
-      <h4 class="text-accent mb-2"><i class="bi bi-people me-2"></i>Active Users</h4>
-      <div class="badge-list">
-        <span class="badge-user">Alice</span>
-        <span class="badge-user">Bob</span>
-        <span class="badge-user">(coming soon)</span>
       </div>
     </div>
   </div>
 </div>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+<style>
+.avatar-lg {
+    width: 48px;
+    height: 48px;
+    font-size: 1.25rem;
+}
+
+.avatar-sm {
+    width: 32px;
+    height: 32px;
+    font-size: 0.875rem;
+}
+
+.card {
+    transition: var(--transition-fast);
+    border: 1px solid var(--border-color);
+}
+
+.card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.list-group-item {
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 0;
+    transition: var(--transition-fast);
+}
+
+.list-group-item:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+@media (max-width: 768px) {
+    .avatar-lg {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}
+.mb-1 , .mb-0{
+    color: var(--text-primary);
+}
+.room-name{
+    color: var(--text-inverse);
+}
+</style>
 {% endblock %} 

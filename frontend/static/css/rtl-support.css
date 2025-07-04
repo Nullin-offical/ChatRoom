@@ -1,0 +1,253 @@
+/* ===== ENHANCED RTL/LTR SUPPORT ===== */
+
+/* Base RTL support for Persian/Arabic text */
+.message-content.rtl {
+    direction: rtl;
+    text-align: right;
+    unicode-bidi: bidi-override;
+    font-family: 'Tahoma', 'Arial', sans-serif;
+    padding-right: var(--message-padding-x);
+    padding-left: var(--spacing-md);
+}
+
+.message-content.rtl .message-text {
+    direction: rtl;
+    text-align: right;
+    unicode-bidi: bidi-override;
+}
+
+/* LTR support for English/other languages */
+.message-content.ltr {
+    direction: ltr;
+    text-align: left;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding-left: var(--message-padding-x);
+    padding-right: var(--spacing-md);
+}
+
+.message-content.ltr .message-text {
+    direction: ltr;
+    text-align: left;
+}
+
+/* Mixed text support - handles Persian/English combinations intelligently */
+.message-content.mixed {
+    direction: ltr;
+    text-align: left;
+    font-family: 'Inter', 'Tahoma', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding-left: var(--message-padding-x);
+    padding-right: var(--message-padding-x);
+}
+
+.message-content.mixed .message-text {
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: embed;
+}
+
+/* Enhanced text rendering for better readability */
+.message-content {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "liga" 1, "kern" 1;
+}
+
+/* Own message RTL adjustments */
+.message-item.own-message .message-content.rtl {
+    padding-left: var(--message-padding-x);
+    padding-right: var(--spacing-md);
+}
+
+.message-item.own-message .message-content.ltr {
+    padding-right: var(--message-padding-x);
+    padding-left: var(--spacing-md);
+}
+
+.message-item.own-message .message-content.mixed {
+    padding-right: var(--message-padding-x);
+    padding-left: var(--message-padding-x);
+}
+
+/* Improved word spacing for better readability */
+.message-content.rtl {
+    word-spacing: 0.1em;
+    letter-spacing: 0.02em;
+}
+
+.message-content.ltr {
+    word-spacing: normal;
+    letter-spacing: normal;
+}
+
+.message-content.mixed {
+    word-spacing: normal;
+    letter-spacing: normal;
+}
+
+/* Better line height for different languages */
+.message-content.rtl {
+    line-height: 1.8;
+}
+
+.message-content.ltr {
+    line-height: 1.6;
+}
+
+.message-content.mixed {
+    line-height: 1.7;
+}
+
+/* Responsive adjustments for RTL/LTR */
+@media (max-width: 768px) {
+    .message-content.rtl {
+        padding-right: var(--spacing-md);
+        padding-left: var(--spacing-sm);
+        font-size: 0.95rem;
+    }
+    
+    .message-content.ltr {
+        padding-left: var(--spacing-md);
+        padding-right: var(--spacing-sm);
+        font-size: 0.95rem;
+    }
+    
+    .message-content.mixed {
+        padding-left: var(--spacing-md);
+        padding-right: var(--spacing-md);
+        font-size: 0.95rem;
+    }
+    
+    .message-item.own-message .message-content.rtl {
+        padding-left: var(--spacing-md);
+        padding-right: var(--spacing-sm);
+    }
+    
+    .message-item.own-message .message-content.ltr {
+        padding-right: var(--spacing-md);
+        padding-left: var(--spacing-sm);
+    }
+    
+    .message-item.own-message .message-content.mixed {
+        padding-right: var(--spacing-md);
+        padding-left: var(--spacing-md);
+    }
+}
+
+@media (max-width: 576px) {
+    .message-content.rtl {
+        padding-right: var(--spacing-sm);
+        padding-left: var(--spacing-xs);
+        font-size: 0.9rem;
+    }
+    
+    .message-content.ltr {
+        padding-left: var(--spacing-sm);
+        padding-right: var(--spacing-xs);
+        font-size: 0.9rem;
+    }
+    
+    .message-content.mixed {
+        padding-left: var(--spacing-sm);
+        padding-right: var(--spacing-sm);
+        font-size: 0.9rem;
+    }
+    
+    .message-item.own-message .message-content.rtl {
+        padding-left: var(--spacing-sm);
+        padding-right: var(--spacing-xs);
+    }
+    
+    .message-item.own-message .message-content.ltr {
+        padding-right: var(--spacing-sm);
+        padding-left: var(--spacing-xs);
+    }
+    
+    .message-item.own-message .message-content.mixed {
+        padding-right: var(--spacing-sm);
+        padding-left: var(--spacing-sm);
+    }
+}
+
+/* Enhanced text selection colors */
+.message-content.rtl::selection {
+    background: rgba(99, 102, 241, 0.3);
+    color: inherit;
+}
+
+.message-content.ltr::selection {
+    background: rgba(99, 102, 241, 0.3);
+    color: inherit;
+}
+
+.message-content.mixed::selection {
+    background: rgba(99, 102, 241, 0.3);
+    color: inherit;
+}
+
+/* Improved focus states for accessibility */
+.message-content:focus {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+}
+
+/* Better handling of long words and URLs */
+.message-content {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    -moz-hyphens: auto;
+    -ms-hyphens: auto;
+}
+
+/* Special handling for numbers in RTL text */
+.message-content.rtl {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Improved spacing for punctuation in RTL */
+.message-content.rtl {
+    text-justify: inter-word;
+}
+
+/* Better handling of mixed content with proper bidi */
+.message-content.mixed {
+    unicode-bidi: embed;
+}
+
+.message-content.mixed * {
+    unicode-bidi: inherit;
+}
+
+/* Additional spacing improvements for message containers */
+#chat-box {
+    padding: var(--spacing-lg) var(--spacing-md);
+}
+
+#chat-box .message-item:last-child {
+    margin-bottom: var(--spacing-lg);
+}
+
+/* Typing indicator spacing */
+.typing-indicator {
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin: var(--spacing-sm) var(--spacing-md);
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    font-style: italic;
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* System message spacing */
+.system-message {
+    text-align: center;
+    margin: var(--spacing-md) var(--spacing-lg);
+    padding: var(--spacing-sm) var(--spacing-md);
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+} 
