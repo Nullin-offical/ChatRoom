@@ -414,10 +414,13 @@ def admin_create_room():
 
 # --- Real-time Room List ---
 def fetch_rooms():
+    print('fetch_rooms() called')
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute('SELECT id, name, slug, password, created_at, hidden FROM rooms WHERE hidden = 0 ORDER BY created_at ASC')
-        return [dict(id=row[0], name=row[1], slug=row[2], has_password=bool(row[3]), created_at=row[4], hidden=bool(row[5])) for row in cur.fetchall()]
+        rooms = [dict(id=row[0], name=row[1], slug=row[2], has_password=bool(row[3]), created_at=row[4], hidden=bool(row[5])) for row in cur.fetchall()]
+        print(f'fetch_rooms() returning {len(rooms)} rooms: {rooms}')
+        return rooms
 
 def fetch_all_rooms():
     """Fetch all rooms including hidden ones for admin panel"""
@@ -428,7 +431,10 @@ def fetch_all_rooms():
 
 @socketio.on('get_rooms')
 def handle_get_rooms():
-    emit('room_list', fetch_rooms())
+    print(f'get_rooms event received from {current_user.username}')
+    rooms = fetch_rooms()
+    print(f'Fetched rooms: {rooms}')
+    emit('room_list', rooms)
 
 # --- Room Join Page ---
 @app.route('/chat/room/<room_slug>')
@@ -462,16 +468,14 @@ def join_room_with_password(room_slug):
         cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
         room = cur.fetchone()
     if not room:
-        flash('Room not found.', 'danger')
-        return redirect(url_for('chat'))
+        return jsonify({'success': False, 'error': 'Room not found.'}), 404
     
     if room[2] and room[2] != password:
-        flash('Incorrect password.', 'danger')
-        return redirect(url_for('chat_room', room_slug=room_slug))
+        return jsonify({'success': False, 'error': 'Incorrect password.'}), 401
     
     # Store successful password verification in session
     session[f'room_access_{room_slug}'] = True
-    return redirect(url_for('chat_room', room_slug=room_slug))
+    return jsonify({'success': True, 'redirect': url_for('chat_room', room_slug=room_slug)})
 
 # --- SocketIO Handlers ---
 @socketio.on('connect')
@@ -513,69 +517,90 @@ def handle_disconnect():
 @socketio.on('join_room')
 @login_required
 def handle_join_room(data):
-    room_slug = data.get('room_slug')
+    room_slug = data.get('room')
     if not room_slug:
         return
     join_room(room_slug)
     print(f'{current_user.username} joined room {room_slug}')
-    # Optionally, announce user joining to the room
-    # socketio.emit('status', {'msg': f'{current_user.username} has entered the room.'}, room=room_slug)
+    # Announce user joining to the room
+    socketio.emit('user_joined', {'username': current_user.username}, room=room_slug)
 
 @socketio.on('leave_room')
 @login_required
 def handle_leave_room(data):
-    room_slug = data.get('room_slug')
+    room_slug = data.get('room')
     if not room_slug:
         return
     leave_room(room_slug)
     print(f'{current_user.username} left room {room_slug}')
-    # Optionally, announce user leaving to the room
-    # socketio.emit('status', {'msg': f'{current_user.username} has left the room.'}, room=room_slug)
+    # Announce user leaving to the room
+    socketio.emit('user_left', {'username': current_user.username}, room=room_slug)
 
 @socketio.on('send_message')
 @login_required
 def handle_send_message(data):
+    print(f"send_message event received from {current_user.username}: {data}")
     content = data.get('content', '').strip()
-    room_slug = data.get('room_slug')
-
-    if not content or not room_slug:
-        emit('error', {'message': 'Message and room are required'})
+    room_slug = data.get('room')
+    
+    if not content:
+        print("No content provided")
+        emit('error', {'message': 'Message content is required'})
         return
-
+    
+    if not room_slug:
+        print("No room provided")
+        emit('error', {'message': 'Room is required'})
+        return
+    
     # Security checks
     security_ok, security_msg = check_message_security(current_user.id, content)
     if not security_ok:
+        print(f"Security check failed: {security_msg}")
         emit('error', {'message': security_msg})
         return
-
+    
     # Sanitize content
     content = sanitize_user_input(content)
-
+    
+    # Simpler: Just get room id by slug
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute('SELECT id FROM rooms WHERE slug=?', (room_slug,))
-        room_row = cur.fetchone()
-        if not room_row:
+        cur.execute('SELECT id FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
+        room_data = cur.fetchone()
+        
+        if not room_data:
+            print(f"Room not found: {room_slug}")
             emit('error', {'message': 'Room not found'})
             return 
-        room_id = room_row[0]
+        
+        room_id = room_data[0]
+        print(f"Found room ID: {room_id}")
 
+        # Insert message and get ID in one operation
         cur.execute(
             'INSERT INTO messages (sender_id, room_id, content, timestamp) VALUES (?, ?, ?, ?)',
             (current_user.id, room_id, content, datetime.now().isoformat())
         )
         message_id = cur.lastrowid
         conn.commit()
+        print(f"Message saved with ID: {message_id}")
 
-        # Fetch the full message to broadcast
+        # Optimized: Single query to get all message data with user info
         cur.execute('''
             SELECT m.content, m.timestamp, u.username, u.display_name, u.profile_image, r.slug as room_slug
             FROM messages m
-            JOIN users u ON m.sender_id = u.id
-            JOIN rooms r ON m.room_id = r.id
+            INNER JOIN users u ON m.sender_id = u.id
+            INNER JOIN rooms r ON m.room_id = r.id
             WHERE m.id = ?
         ''', (message_id,))
         msg_row = cur.fetchone()
+        
+        if not msg_row:
+            print("Error: Could not retrieve saved message")
+            emit('error', {'message': 'Failed to save message'})
+            return
+            
         msg = {
             'username': msg_row[2],
             'display_name': msg_row[3] or msg_row[2],
@@ -584,36 +609,50 @@ def handle_send_message(data):
             'profile_image': msg_row[4] or 'default.png',
             'room_slug': msg_row[5]
         }
+        print(f"Broadcasting message: {msg}")
     
     socketio.emit('new_message', msg, room=room_slug)
 
 @socketio.on('get_chat_history')
 @login_required
 def handle_get_chat_history(data):
-    room_slug = data.get('room_slug')
+    print(f"get_chat_history event received from {current_user.username}: {data}")
+    room_slug = data.get('room')
     if not room_slug:
+        print("No room provided")
         return
         
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute('SELECT id FROM rooms WHERE slug=?', (room_slug,))
+        # Optimized: Use indexed lookup for room
+        cur.execute('SELECT id FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
         room = cur.fetchone()
         if not room:
+            print(f"Room not found: {room_slug}")
             emit('chat_history', [])
             return
         
         room_id = room[0]
+        print(f"Loading chat history for room ID: {room_id}")
+        
+        # Optimized query: Limit to last 100 messages, use proper indexing
         cur.execute('''
-            SELECT m.content, m.timestamp, u.username, u.profile_image, r.slug as room_slug
+            SELECT m.content, m.timestamp, u.username, u.display_name, u.profile_image, r.slug as room_slug
             FROM messages m
-            JOIN users u ON m.sender_id = u.id
-            JOIN rooms r ON m.room_id = r.id
-            WHERE m.room_id=? ORDER BY m.timestamp ASC
+            INNER JOIN users u ON m.sender_id = u.id
+            INNER JOIN rooms r ON m.room_id = r.id
+            WHERE m.room_id = ?
+            ORDER BY m.timestamp DESC
+            LIMIT 100
         ''', (room_id,))
+        
+        # Reverse the results to get chronological order
+        rows = cur.fetchall()
         messages = [
-            {'content': row[0], 'timestamp': row[1], 'username': row[2], 'profile_image': row[3], 'room_slug': row[4]} 
-            for row in cur.fetchall()
+            {'content': row[0], 'timestamp': row[1], 'username': row[2], 'display_name': row[3], 'profile_image': row[4], 'room_slug': row[5]} 
+            for row in reversed(rows)
         ]
+        print(f"Found {len(messages)} messages for room {room_slug}")
         
     emit('chat_history', messages)
 
@@ -680,7 +719,7 @@ def pm_chat(username):
         flash('User not found.', 'danger')
         return redirect(url_for('pm_index'))
     
-    return render_template('pm.html', target_username=target_user.username)
+    return render_template('pm.html', target_username=target_user.username, current_user_id=current_user.id)
 
 # --- API: Search Users ---
 @app.route('/api/search_users')
@@ -691,43 +730,76 @@ def api_search_users():
         return jsonify([])
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute('SELECT username FROM users WHERE username LIKE ? AND username != ? LIMIT 20', (f'%{q}%', current_user.username))
-        results = [row[0] for row in cur.fetchall()]
+        cur.execute('SELECT id, username, display_name FROM users WHERE username LIKE ? AND username != ? LIMIT 20', (f'%{q}%', current_user.username))
+        results = []
+        for row in cur.fetchall():
+            results.append({
+                'id': row[0],
+                'username': row[1],
+                'display_name': row[2] or row[1]
+            })
         return jsonify(results)
 
 @app.route('/api/pm_chats')
 @login_required
 def api_pm_chats():
-    """Get list of users with whom current user has exchanged PMs"""
+    """Get list of users with whom current user has exchanged PMs - Optimized version"""
     with get_db() as conn:
         cur = conn.cursor()
         
-        # Get users with whom current user has exchanged messages
+        # Optimized query: Use CTE for better performance and readability
         cur.execute('''
-            SELECT DISTINCT u.username, u.id,
-                   (SELECT COUNT(*) FROM private_messages 
-                    WHERE (sender_id = ? AND receiver_id = u.id) 
-                       OR (sender_id = u.id AND receiver_id = ?)) as message_count,
-                   (SELECT MAX(timestamp) FROM private_messages 
-                    WHERE (sender_id = ? AND receiver_id = u.id) 
-                       OR (sender_id = u.id AND receiver_id = ?)) as last_message_time,
-                   (SELECT content FROM private_messages 
-                    WHERE (sender_id = ? AND receiver_id = u.id) 
-                       OR (sender_id = u.id AND receiver_id = ?)
-                    ORDER BY timestamp DESC LIMIT 1) as last_message
-            FROM users u
-            WHERE u.id IN (
-                SELECT DISTINCT 
+            WITH user_messages AS (
+                SELECT 
                     CASE 
                         WHEN sender_id = ? THEN receiver_id 
                         ELSE sender_id 
-                    END
+                    END as other_user_id,
+                    MAX(timestamp) as last_message_time,
+                    COUNT(*) as message_count
                 FROM private_messages 
                 WHERE sender_id = ? OR receiver_id = ?
+                GROUP BY other_user_id
+            ),
+            latest_messages AS (
+                SELECT 
+                    pm.sender_id,
+                    pm.receiver_id,
+                    pm.content,
+                    pm.timestamp,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY 
+                            CASE 
+                                WHEN pm.sender_id = ? THEN pm.receiver_id 
+                                ELSE pm.sender_id 
+                            END
+                        ORDER BY pm.timestamp DESC
+                    ) as rn
+                FROM private_messages pm
+                WHERE pm.sender_id = ? OR pm.receiver_id = ?
             )
-            ORDER BY last_message_time DESC
-        ''', (current_user.id, current_user.id, current_user.id, current_user.id, 
-              current_user.id, current_user.id, current_user.id, current_user.id, current_user.id))
+            SELECT 
+                u.username, 
+                u.id,
+                um.message_count,
+                um.last_message_time,
+                lm.content as last_message
+            FROM user_messages um
+            INNER JOIN users u ON u.id = um.other_user_id
+            LEFT JOIN latest_messages lm ON (
+                (lm.sender_id = ? AND lm.receiver_id = um.other_user_id) OR
+                (lm.sender_id = um.other_user_id AND lm.receiver_id = ?)
+            ) AND lm.rn = 1
+            WHERE u.id NOT IN (
+                SELECT blocked_id FROM user_blocks WHERE blocker_id = ?
+            )
+            AND u.id NOT IN (
+                SELECT blocker_id FROM user_blocks WHERE blocked_id = ?
+            )
+            ORDER BY um.last_message_time DESC
+        ''', (current_user.id, current_user.id, current_user.id, 
+              current_user.id, current_user.id, current_user.id,
+              current_user.id, current_user.id, current_user.id, current_user.id))
         
         chats = []
         for row in cur.fetchall():
@@ -739,6 +811,141 @@ def api_pm_chats():
                 'last_message': row[4] or 'No messages yet'
             })
         return jsonify(chats)
+
+@app.route('/api/delete_chat/<int:other_user_id>', methods=['POST'])
+@login_required
+def api_delete_chat(other_user_id):
+    """Delete a chat conversation for the current user (one-sided deletion)"""
+    try:
+        with get_db() as conn:
+            cur = conn.cursor()
+            
+            # Check if the other user exists
+            cur.execute('SELECT id FROM users WHERE id = ?', (other_user_id,))
+            if not cur.fetchone():
+                return jsonify({'error': 'User not found'}), 404
+            
+            # Check if there's already a deletion record
+            cur.execute('SELECT id FROM deleted_chats WHERE user_id = ? AND other_user_id = ?', 
+                       (current_user.id, other_user_id))
+            
+            if cur.fetchone():
+                return jsonify({'error': 'Chat already deleted'}), 400
+            
+            # Add deletion record
+            cur.execute('INSERT INTO deleted_chats (user_id, other_user_id) VALUES (?, ?)', 
+                       (current_user.id, other_user_id))
+            conn.commit()
+            
+            return jsonify({'success': True, 'message': 'Chat deleted successfully'})
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to delete chat: {str(e)}'}), 500
+
+@app.route('/api/block_user/<int:user_id>', methods=['POST'])
+@login_required
+def api_block_user(user_id):
+    """Block a user"""
+    try:
+        if user_id == current_user.id:
+            return jsonify({'error': 'Cannot block yourself'}), 400
+            
+        with get_db() as conn:
+            cur = conn.cursor()
+            
+            # Check if the user exists
+            cur.execute('SELECT id FROM users WHERE id = ?', (user_id,))
+            if not cur.fetchone():
+                return jsonify({'error': 'User not found'}), 404
+            
+            # Check if already blocked
+            cur.execute('SELECT id FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?', 
+                       (current_user.id, user_id))
+            
+            if cur.fetchone():
+                return jsonify({'error': 'User already blocked'}), 400
+            
+            # Add block record
+            cur.execute('INSERT INTO user_blocks (blocker_id, blocked_id) VALUES (?, ?)', 
+                       (current_user.id, user_id))
+            conn.commit()
+            
+            return jsonify({'success': True, 'message': 'User blocked successfully'})
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to block user: {str(e)}'}), 500
+
+@app.route('/api/unblock_user/<int:user_id>', methods=['POST'])
+@login_required
+def api_unblock_user(user_id):
+    """Unblock a user"""
+    print(f"Unblock request: {current_user.username} trying to unblock user ID {user_id}")
+    try:
+        with get_db() as conn:
+            cur = conn.cursor()
+            
+            # Check if the user is blocked
+            cur.execute('SELECT id FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?', 
+                       (current_user.id, user_id))
+            
+            block_record = cur.fetchone()
+            if not block_record:
+                print(f"User {user_id} is not blocked by {current_user.username}")
+                return jsonify({'error': 'User not blocked'}), 400
+            
+            print(f"Found block record: {block_record[0]}")
+            
+            # Remove block record
+            cur.execute('DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?', 
+                       (current_user.id, user_id))
+            deleted_rows = cur.rowcount
+            conn.commit()
+            
+            print(f"Deleted {deleted_rows} block record(s)")
+            
+            # Verify the block was removed
+            cur.execute('SELECT id FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?', 
+                       (current_user.id, user_id))
+            remaining_block = cur.fetchone()
+            if remaining_block:
+                print(f"ERROR: Block record still exists after deletion!")
+                return jsonify({'error': 'Failed to remove block record'}), 500
+            
+            print(f"Successfully unblocked user {user_id}")
+            return jsonify({'success': True, 'message': 'User unblocked successfully'})
+            
+    except Exception as e:
+        print(f"Error in unblock_user: {e}")
+        return jsonify({'error': f'Failed to unblock user: {str(e)}'}), 500
+
+@app.route('/api/blocked_users')
+@login_required
+def api_blocked_users():
+    """Get list of users blocked by current user"""
+    with get_db() as conn:
+        cur = conn.cursor()
+        
+        cur.execute('''
+            SELECT u.id, u.username, u.display_name, ub.blocked_at
+            FROM user_blocks ub
+            JOIN users u ON ub.blocked_id = u.id
+            WHERE ub.blocker_id = ?
+            ORDER BY ub.blocked_at DESC
+        ''', (current_user.id,))
+        
+        blocked_users = []
+        for row in cur.fetchall():
+            user_id, username, display_name, blocked_at = row
+            blocked_users.append({
+                'id': user_id,
+                'username': username,
+                'display_name': display_name or username,
+                'blocked_at': blocked_at
+            })
+    
+    return jsonify(blocked_users)
+
+
 
 # --- SocketIO events for Private Messaging ---
 @socketio.on('join_pm')
@@ -768,60 +975,130 @@ def handle_leave_pm(data):
 @socketio.on('send_pm')
 @login_required
 def handle_send_pm(data):
-    content = data.get('content', '').strip()
-    recipient = data.get('recipient')  # Changed from target_username to recipient
+    print(f"Received PM data: {data}")
     
-    if not content or not recipient:
-        emit('error', {'message': 'Message and recipient are required'})
+    content = data.get('content', '').strip()
+    recipient = data.get('recipient')
+    
+    print(f"Content: '{content}', Recipient: '{recipient}'")
+    
+    if not content:
+        print("Error: No content provided")
+        emit('error', {'message': 'Message content is required'})
+        return
+    
+    if not recipient:
+        print("Error: No recipient provided")
+        emit('error', {'message': 'Recipient is required'})
         return
     
     # Security checks
     security_ok, security_msg = check_message_security(current_user.id, content)
     if not security_ok:
+        print(f"Security check failed: {security_msg}")
         emit('error', {'message': security_msg})
         return
     
     # Sanitize content
     content = sanitize_user_input(content)
     
+    # Validate recipient exists and is not the current user
     target_user = get_user_by_username(recipient)
-    if not target_user or target_user.id == current_user.id:
-        emit('error', {'message': 'Invalid recipient'})
+    if not target_user:
+        print(f"Error: User '{recipient}' not found")
+        emit('error', {'message': f'User "{recipient}" not found'})
         return
     
+    if target_user.id == current_user.id:
+        print("Error: Cannot send message to yourself")
+        emit('error', {'message': 'Cannot send message to yourself'})
+        return
+    
+    # Check if either user has blocked the other
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute(
-            'INSERT INTO private_messages (sender_id, receiver_id, content, timestamp) VALUES (?, ?, ?, ?)',
-            (current_user.id, target_user.id, content, datetime.now().isoformat())
-        )
-        msg_id = cur.lastrowid
-        conn.commit()
-        cur.execute('''SELECT pm.content, pm.timestamp, u.profile_image, u.display_name
-                       FROM private_messages pm 
-                       JOIN users u ON pm.sender_id = u.id 
-                       WHERE pm.id=?''', (msg_id,))
-        row = cur.fetchone()
-        message = {
-            'username': current_user.username,
-            'display_name': row[3] or current_user.username,
-            'content': row[0],
-            'timestamp': row[1],
-            'profile_image': row[2] or 'default.png',
-            'sender': current_user.username,
-            'recipient': recipient
-        }
-    room_name = _pm_room_name(current_user.id, target_user.id)
-    socketio.emit('new_pm', message, room=room_name)
+        cur.execute('''
+            SELECT 1 FROM user_blocks 
+            WHERE (blocker_id = ? AND blocked_id = ?) 
+               OR (blocker_id = ? AND blocked_id = ?)
+        ''', (current_user.id, target_user.id, target_user.id, current_user.id))
+        
+        if cur.fetchone():
+            print("Error: Cannot send message - user is blocked")
+            emit('error', {'message': 'Cannot send message to this user'})
+            return
     
-    # Send notification to receiver
-    notification = {
-        'type': 'pm',
-        'from': current_user.username,
-        'message': content[:50] + '...' if len(content) > 50 else content,
-        'timestamp': row[1]
-    }
-    socketio.emit('notification', notification, room=f'user_{target_user.id}')
+    print(f"Sending PM from {current_user.username} to {target_user.username}")
+    
+    try:
+        with get_db() as conn:
+            cur = conn.cursor()
+            
+            # Insert the message
+            cur.execute(
+                'INSERT INTO private_messages (sender_id, receiver_id, content, timestamp) VALUES (?, ?, ?, ?)',
+                (current_user.id, target_user.id, content, datetime.now().isoformat())
+            )
+            msg_id = cur.lastrowid
+            conn.commit()
+            
+            print(f"Message saved with ID: {msg_id}")
+            
+            # Verify the message was saved correctly
+            cur.execute('SELECT sender_id, receiver_id, content, timestamp FROM private_messages WHERE id = ?', (msg_id,))
+            saved_msg = cur.fetchone()
+            if saved_msg:
+                print(f"Saved message: sender_id={saved_msg[0]}, receiver_id={saved_msg[1]}, content='{saved_msg[2]}'")
+            else:
+                print("Error: Message not found after saving")
+                emit('error', {'message': 'Failed to save message'})
+                return
+            
+            # Get the inserted message with user details
+            cur.execute('''SELECT pm.content, pm.timestamp, u.profile_image, u.display_name
+                           FROM private_messages pm 
+                           JOIN users u ON pm.sender_id = u.id 
+                           WHERE pm.id=?''', (msg_id,))
+            row = cur.fetchone()
+            
+            if not row:
+                print("Error: Could not retrieve saved message")
+                emit('error', {'message': 'Failed to save message'})
+                return
+            
+            message = {
+                'username': current_user.username,
+                'display_name': row[3] or current_user.username,
+                'content': row[0],
+                'timestamp': row[1],
+                'profile_image': row[2] or 'default.png',
+                'sender': current_user.username,
+                'recipient': recipient
+            }
+            
+            print(f"Prepared message: {message}")
+        
+        # Send to PM room
+        room_name = _pm_room_name(current_user.id, target_user.id)
+        print(f"Emitting to room: {room_name}")
+        socketio.emit('new_pm', message, room=room_name)
+        
+        # Send notification to receiver
+        notification = {
+            'type': 'pm',
+            'from': current_user.username,
+            'message': content[:50] + '...' if len(content) > 50 else content,
+            'timestamp': row[1]
+        }
+        socketio.emit('notification', notification, room=f'user_{target_user.id}')
+        
+        print("PM sent successfully")
+        
+    except Exception as e:
+        print(f"Error sending PM: {e}")
+        import traceback
+        traceback.print_exc()
+        emit('error', {'message': 'Failed to send message'})
 
 @socketio.on('get_pm_history')
 @login_required
@@ -884,6 +1161,28 @@ def handle_user_inactive(data):
         cur.execute('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id,))
         conn.commit()
 
+@socketio.on('typing')
+@login_required
+def handle_typing(data):
+    """Handle typing indicator for chat rooms"""
+    room_slug = data.get('room')
+    if not room_slug:
+        return
+    socketio.emit('typing', {
+        'username': current_user.username
+    }, room=room_slug)
+
+@socketio.on('stop_typing')
+@login_required
+def handle_stop_typing(data):
+    """Handle stop typing indicator for chat rooms"""
+    room_slug = data.get('room')
+    if not room_slug:
+        return
+    socketio.emit('stop_typing', {
+        'username': current_user.username
+    }, room=room_slug)
+
 @socketio.on('pm_typing')
 @login_required
 def handle_pm_typing(data):
@@ -917,7 +1216,7 @@ def handle_pm_stop_typing(data):
 @socketio.on('search_users')
 @login_required
 def handle_search_users(data):
-    """Handle user search for PM"""
+    """Handle user search for PM (excluding blocked users)"""
     query = data.get('query', '').strip()
     if not query or len(query) < 2:
         emit('search_results', [])
@@ -925,10 +1224,19 @@ def handle_search_users(data):
     
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute('''SELECT username, display_name FROM users 
-                       WHERE username LIKE ? AND username != ? 
-                       ORDER BY username LIMIT 10''', 
-                    (f'%{query}%', current_user.username))
+        cur.execute('''
+            SELECT u.username, u.display_name 
+            FROM users u
+            WHERE u.username LIKE ? 
+            AND u.username != ? 
+            AND NOT EXISTS (
+                SELECT 1 FROM user_blocks 
+                WHERE (blocker_id = ? AND blocked_id = u.id) 
+                   OR (blocker_id = u.id AND blocked_id = ?)
+            )
+            ORDER BY u.username 
+            LIMIT 10
+        ''', (f'%{query}%', current_user.username, current_user.id, current_user.id))
         users = []
         for row in cur.fetchall():
             users.append({
@@ -940,11 +1248,13 @@ def handle_search_users(data):
 @socketio.on('get_pm_chats')
 @login_required
 def handle_get_pm_chats():
-    """Get list of PM chats for current user"""
+    """Get list of PM chats for current user (excluding deleted chats and blocked users)"""
+    print(f"Getting PM chats for user: {current_user.username} (ID: {current_user.id})")
+    
     with get_db() as conn:
         cur = conn.cursor()
         
-        # Get users with whom current user has exchanged messages
+        # Get users with whom current user has exchanged messages (excluding deleted chats and blocked users)
         cur.execute('''
             SELECT DISTINCT u.username, u.id,
                    (SELECT COUNT(*) FROM private_messages 
@@ -967,19 +1277,33 @@ def handle_get_pm_chats():
                 FROM private_messages 
                 WHERE sender_id = ? OR receiver_id = ?
             )
+            AND NOT EXISTS (
+                SELECT 1 FROM deleted_chats 
+                WHERE user_id = ? AND other_user_id = u.id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM user_blocks 
+                WHERE (blocker_id = ? AND blocked_id = u.id) 
+                   OR (blocker_id = u.id AND blocked_id = ?)
+            )
             ORDER BY last_message_time DESC
         ''', (current_user.id, current_user.id, current_user.id, current_user.id, 
-              current_user.id, current_user.id, current_user.id, current_user.id, current_user.id))
+              current_user.id, current_user.id, current_user.id, current_user.id, current_user.id,
+              current_user.id, current_user.id, current_user.id))
         
         chats = []
         for row in cur.fetchall():
-            chats.append({
+            chat_data = {
                 'username': row[0],
                 'user_id': row[1],
                 'message_count': row[2],
                 'last_message_time': row[3] or '2024-01-01 00:00:00',
                 'last_message': row[4] or 'No messages yet'
-            })
+            }
+            chats.append(chat_data)
+            print(f"Chat with {row[0]}: {row[2]} messages, last: {row[3]}")
+        
+        print(f"Returning {len(chats)} chats")
         emit('pm_chats', chats)
 
 # --- Settings Utility ---
@@ -1001,6 +1325,13 @@ def set_setting(key, value):
 def inject_site_name():
     site_name = get_setting('site_name', 'ChatRoom')
     return dict(site_name=site_name)
+
+@app.route('/api/rooms')
+@login_required
+def api_get_rooms():
+    """API endpoint to get rooms (fallback for socket issues)"""
+    rooms = fetch_rooms()
+    return jsonify(rooms)
 
 # --- Main Entrypoint ---
 if __name__ == '__main__':

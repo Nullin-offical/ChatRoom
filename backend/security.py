@@ -112,10 +112,6 @@ class SecurityManager:
             if re.search(pattern, content, re.IGNORECASE):
                 return False, "Message contains forbidden content"
         
-        # Check for excessive repetition
-        if len(set(content)) < len(content) * 0.3:  # More than 70% repeated characters
-            return False, "Message contains too much repetition"
-        
         return True, "OK"
     
     def validate_username(self, username):

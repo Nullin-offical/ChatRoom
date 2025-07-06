@@ -77,6 +77,34 @@ def init_db():
         conn.commit()
         print('Private messages table ensured.')
         
+        # Ensure deleted_chats table exists (for one-sided chat deletion)
+        cur.execute('''CREATE TABLE IF NOT EXISTS deleted_chats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            other_user_id INTEGER NOT NULL,
+            deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (other_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(user_id, other_user_id)
+        )''')
+        conn.commit()
+        print('Deleted chats table ensured.')
+        
+        # Ensure user_blocks table exists (for block/unblock functionality)
+        cur.execute('''CREATE TABLE IF NOT EXISTS user_blocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            blocker_id INTEGER NOT NULL,
+            blocked_id INTEGER NOT NULL,
+            blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(blocker_id, blocked_id)
+        )''')
+        conn.commit()
+        print('User blocks table ensured.')
+        
+
+        
         # MIGRATION: Add password column to rooms table if not exists
         cur.execute('PRAGMA table_info(rooms)')
         columns = [col[1] for col in cur.fetchall()]
