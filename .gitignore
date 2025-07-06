@@ -71,11 +71,6 @@ backend/models/*.pyc
 *.pid
 nohup.out
 
-# Ignore old migration scripts and backups
-backend/migrations/
-
-# Ignore database migration leftovers
-backend/db/migrate_*.py
 
 # Ignore shell history
 *.swp
