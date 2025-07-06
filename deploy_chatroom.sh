@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# ChatRoom DevOps Deployment Script
-# Automatically deploys and shares ChatRoom application
+# ChatRoom Deployment Script
+# Automated setup with admin user creation
 
 set -e  # Exit on any error
 
@@ -21,7 +21,7 @@ PORT=5000
 ADMIN_EMAIL="admin@chatroom.local"
 
 # Progress tracking
-TOTAL_STEPS=12
+TOTAL_STEPS=13
 CURRENT_STEP=0
 
 # Function to show progress
@@ -91,6 +91,44 @@ wait_for_service() {
         attempt=$((attempt + 1))
     done
     return 1
+}
+
+# Function to create admin user
+create_admin_user() {
+    local username=$1
+    local password=$2
+    local email=$3
+    local display_name=$4
+    
+    python3 -c "
+import sqlite3
+import hashlib
+import os
+from datetime import datetime
+
+db_path = 'db/chatroom.db'
+if os.path.exists(db_path):
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    
+    # Check if admin user already exists
+    cur.execute('SELECT id FROM users WHERE username = ?', ('$username',))
+    if not cur.fetchone():
+        # Create admin user
+        password_hash = hashlib.sha256('$password'.encode()).hexdigest()
+        cur.execute('''
+            INSERT INTO users (username, password_hash, email, display_name, is_admin, created_at, last_seen)
+            VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ''', ('$username', password_hash, '$email', '$display_name'))
+        conn.commit()
+        print('Admin user created successfully')
+    else:
+        print('Admin user already exists')
+    
+    conn.close()
+else:
+    print('Database not found')
+"
 }
 
 # Main deployment function
@@ -172,14 +210,44 @@ main() {
     python db/migrate_add_settings_table.py >/dev/null 2>&1
     print_status "Database initialized successfully"
     
-    # Step 9: Set environment variables
+    # Step 9: Admin user creation
+    show_progress "Setting up admin user..."
+    echo ""
+    echo -e "${PURPLE}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║                    Admin User Setup                          ║${NC}"
+    echo -e "${PURPLE}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    # Get admin credentials
+    read -p "Enter admin username (default: admin): " ADMIN_USERNAME
+    ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+    
+    read -s -p "Enter admin password (default: admin123): " ADMIN_PASSWORD
+    echo ""
+    ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+    
+    read -p "Enter admin email (default: admin@chatroom.local): " ADMIN_EMAIL
+    ADMIN_EMAIL=${ADMIN_EMAIL:-admin@chatroom.local}
+    
+    read -p "Enter admin display name (default: Administrator): " ADMIN_DISPLAY_NAME
+    ADMIN_DISPLAY_NAME=${ADMIN_DISPLAY_NAME:-Administrator}
+    
+    echo ""
+    echo -e "${CYAN}Creating admin user: $ADMIN_USERNAME${NC}"
+    echo ""
+    
+    # Create admin user
+    create_admin_user "$ADMIN_USERNAME" "$ADMIN_PASSWORD" "$ADMIN_EMAIL" "$ADMIN_DISPLAY_NAME"
+    print_status "Admin user setup completed"
+    
+    # Step 10: Set environment variables
     show_progress "Configuring environment..."
     export FLASK_ENV=development
     export FLASK_DEBUG=True
     export SECRET_KEY="dev-secret-key-$(date +%s)"
     print_status "Environment configured"
     
-    # Step 10: Check port availability
+    # Step 11: Check port availability
     show_progress "Checking port availability..."
     if check_port $PORT; then
         print_warning "Port $PORT is already in use. Trying to find alternative..."
@@ -193,7 +261,7 @@ main() {
     fi
     print_status "Port $PORT is available"
     
-    # Step 11: Start the application
+    # Step 12: Start the application
     show_progress "Starting ChatRoom application..."
     nohup python run.py >/dev/null 2>&1 &
     APP_PID=$!
@@ -203,7 +271,7 @@ main() {
     echo $APP_PID > .chatroom.pid
     print_status "Application started with PID: $APP_PID"
     
-    # Step 12: Wait for service to be ready
+    # Step 13: Wait for service to be ready
     show_progress "Waiting for service to be ready..."
     if wait_for_service "http://localhost:$PORT"; then
         print_status "Service is ready and responding"
@@ -228,10 +296,11 @@ main() {
     echo -e "  ${BLUE}•${NC} Deployment:    ${GREEN}$DEPLOY_DIR/$PROJECT_NAME${NC}"
     echo ""
     
-    # Create admin credentials
-    echo -e "${YELLOW}🔐 Default Admin Credentials:${NC}"
-    echo -e "  ${BLUE}•${NC} Username: ${GREEN}admin${NC}"
-    echo -e "  ${BLUE}•${NC} Password: ${GREEN}admin123${NC}"
+    # Display admin credentials
+    echo -e "${YELLOW}🔐 Admin Credentials:${NC}"
+    echo -e "  ${BLUE}•${NC} Username: ${GREEN}$ADMIN_USERNAME${NC}"
+    echo -e "  ${BLUE}•${NC} Password: ${GREEN}$ADMIN_PASSWORD${NC}"
+    echo -e "  ${BLUE}•${NC} Email: ${GREEN}$ADMIN_EMAIL${NC}"
     echo ""
     
     # Instructions for sharing

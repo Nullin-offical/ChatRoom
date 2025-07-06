@@ -4,6 +4,10 @@ __pycache__/
 *.pyo
 *.pyd
 *.pyc
+__pycache__/
+*.pyc
+*.lnk
+*.db
 
 # Virtualenv
 venv/
@@ -47,12 +51,27 @@ build/
 # Ignore compiled schema
 backend/models/*.pyc
 
-# Ignore migration leftovers
-backend/migrations/
-
 # Ignore backup files
 *~
 *.bak
 
 # Ignore user-uploaded avatars (if any, otherwise comment this out)
-# frontend/static/avatars/uploads/ 
+# frontend/static/avatars/uploads/
+
+# Ignore temp and PID files from deployment
+*.pid
+nohup.out
+
+# Ignore old migration scripts and backups
+backend/migrate_*.py
+backend/migrations/
+
+# Ignore database migration leftovers
+backend/db/migrate_*.py
+
+# Ignore shell history
+*.swp
+*.swo
+
+# Ignore deployment output folders
+chatroom_deployment/ 

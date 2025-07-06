@@ -101,7 +101,7 @@
                                                     {% endif %}
                                                 </div>
                                             </td>
-                                            <td>{{ user.email }}</td>
+                                    <td>{{ user.email }}</td>
                                             <td>
                                                 {% if user.is_admin %}
                                                 <span class="badge bg-warning text-dark">Administrator</span>
@@ -109,19 +109,19 @@
                                                 <span class="badge bg-secondary">User</span>
                                                 {% endif %}
                                             </td>
-                                            <td>
-                                                {% if user.id != current_user.id %}
-                                                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal{{ user.id }}">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                                {% else %}
-                                                <span class="text-muted small">(You)</span>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
+                                    <td>
+                                      {% if user.id != current_user.id %}
+                                                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal{{ user.id }}">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                      {% else %}
+                                                    <span class="text-muted small">(You)</span>
+                                      {% endif %}
+                                    </td>
+                                  </tr>
+                                  {% endfor %}
+                                </tbody>
+                              </table>
                             </div>
                         </div>
                     </div>
@@ -172,11 +172,11 @@
                                                 <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteMessageModal{{ msg.id }}">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
+                                    </td>
+                                  </tr>
+                                  {% endfor %}
+                                </tbody>
+                              </table>
                             </div>
                         </div>
                     </div>
@@ -467,4 +467,12 @@
     }
 }
 </style>
+
+<script>
+// Admin panel functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Add any admin-specific functionality here
+    console.log('Admin panel loaded');
+});
+</script>
 {% endblock %} 

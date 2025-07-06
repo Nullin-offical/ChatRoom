@@ -2,11 +2,22 @@
 
 {% block title %}{% if target_username %}Chat with {{ target_username }}{% else %}Private Messages{% endif %} - ChatRoom{% endblock %}
 
+{% block head %}
+<meta name="current-user" content="{{ current_user.username }}">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     <div class="row">
-        <!-- Sidebar - Chat List -->
-        <div class="col-md-4 col-lg-3">
+        <!-- Mobile Sidebar Toggle -->
+        <div class="d-md-none w-100 mb-3">
+            <button class="btn btn-primary w-100" type="button" data-bs-toggle="offcanvas" data-bs-target="#pmSidebarOffcanvas" aria-controls="pmSidebarOffcanvas">
+                <i class="bi bi-envelope me-2"></i>Messages
+            </button>
+        </div>
+
+        <!-- Sidebar - Chat List (Desktop) -->
+        <div class="col-md-4 col-lg-3 d-none d-md-block">
             <div class="card h-100" style="min-height: 80vh;">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
@@ -18,8 +29,13 @@
                     <!-- Search Form -->
                     <div class="p-3 border-bottom">
                         <form id="user-search-form" class="d-flex gap-2">
-                            <input type="text" id="user-search-input" class="form-control form-control-sm" 
-                                   placeholder="Search user..." value="{{ target_username or '' }}" required>
+                            <div class="flex-grow-1 position-relative">
+                                <input type="text" id="user-search-input" class="form-control form-control-sm" 
+                                       placeholder="Search user..." value="{{ target_username or '' }}" required>
+                                <div id="search-results" class="search-results-dropdown" style="display: none;">
+                                    <!-- Search results will be populated by JavaScript -->
+                                </div>
+                            </div>
                             <button class="btn btn-sm btn-primary" type="submit">
                                 <i class="bi bi-search"></i>
                             </button>
@@ -28,8 +44,8 @@
                                 <i class="bi bi-plus"></i>
                             </a>
                             {% endif %}
-                        </form>
-                    </div>
+        </form>
+      </div>
                     
                     <!-- Chat List -->
                     <div id="chat-list" class="list-group list-group-flush">
@@ -39,9 +55,46 @@
             </div>
         </div>
 
+        <!-- Mobile Sidebar (Offcanvas) -->
+        <div class="offcanvas offcanvas-start" tabindex="-1" id="pmSidebarOffcanvas" aria-labelledby="pmSidebarOffcanvasLabel">
+            <div class="offcanvas-header">
+                <h5 class="offcanvas-title" id="pmSidebarOffcanvasLabel">
+                    <i class="bi bi-envelope me-2"></i>Messages
+                </h5>
+                <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body p-0">
+                <!-- Search Form -->
+                <div class="p-3 border-bottom">
+                    <form id="user-search-form-mobile" class="d-flex gap-2">
+                        <div class="flex-grow-1 position-relative">
+                            <input type="text" id="user-search-input-mobile" class="form-control form-control-sm" 
+                                   placeholder="Search user..." value="{{ target_username or '' }}" required>
+                            <div id="search-results-mobile" class="search-results-dropdown" style="display: none;">
+                                <!-- Search results will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-primary" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                        {% if target_username %}
+                        <a href="/pm" class="btn btn-sm btn-secondary btn-plus" title="New Chat">
+                            <i class="bi bi-plus"></i>
+                        </a>
+        {% endif %}
+                    </form>
+                </div>
+                
+                <!-- Chat List -->
+                <div id="chat-list-mobile" class="list-group list-group-flush">
+                    <!-- Chats will be populated by JavaScript -->
+                </div>
+            </div>
+      </div>
+
         <!-- Main Chat Area -->
         <div class="col-md-8 col-lg-9">
-            {% if target_username %}
+      {% if target_username %}
             <!-- Specific Chat -->
             <div class="card h-100" style="min-height: 80vh;">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -56,8 +109,8 @@
                     </div>
                     <div class="d-flex gap-2">
                         <span class="badge bg-success" id="pm-status">Online</span>
-                        <span class="badge bg-info" id="connection-status">
-                            <i class="bi bi-circle-fill me-1"></i>Connected
+                        <span class="badge bg-success" id="connection-status">
+                            <i class="bi bi-wifi"></i>
                         </span>
                         <a href="/user/{{ target_username }}" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-person"></i>
@@ -74,20 +127,27 @@
 
                     <!-- Typing Indicator -->
                     <div id="typing-indicator" class="px-3 pb-2" style="display: none;">
-                        <small class="text-muted">
-                            <i class="bi bi-three-dots"></i> {{ target_username }} is typing...
-                        </small>
+                        <div class="typing-bubble">
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <small class="text-muted ms-2">{{ target_username }} is typing...</small>
+                        </div>
                     </div>
 
                     <!-- Message Input -->
                     <div class="border-top p-3">
-                        <form id="chat-form" class="d-flex gap-2">
-                            <input type="text" id="message-input" class="form-control" 
-                                   placeholder="Type your message..." autocomplete="off" required>
-                            <button type="submit" class="btn btn-primary">
+                        <form id="chat-form" class="d-flex gap-2 align-items-end">
+                            <div class="flex-grow-1 position-relative">
+                                <input type="text" id="message-input" class="form-control message-input" 
+                                       placeholder="Type your message..." autocomplete="off" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary send-btn">
                                 <i class="bi bi-send"></i>
                             </button>
-                        </form>
+      </form>
                     </div>
                 </div>
             </div>
@@ -104,27 +164,45 @@
                     </div>
                 </div>
             </div>
-            {% endif %}
-        </div>
+      {% endif %}
     </div>
+  </div>
 </div>
 
 <!-- Message Template (Hidden) -->
 <template id="message-template">
     <div class="message-item">
+        <!-- For alignment, both avatar and content are in a flex row, but order is controlled by JS/CSS -->
         <div class="message-row">
-            <div class="flex-shrink-0">
-                <div class="avatar-sm rounded-circle d-flex align-items-center justify-content-center overflow-hidden">
-                    <img class="profile-image" src="" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; display: none;">
-                    <i class="bi bi-person text-white avatar-fallback"></i>
+            <!-- Avatar for own-message (right) -->
+            <div class="avatar-sm message-avatar-own">
+                <img src="/static/avatars/default.png" 
+                     alt="Profile" 
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="avatar-fallback" style="display: none;">
+                    U
                 </div>
             </div>
-            <div class="flex-grow-1">
+            <!-- Message content -->
+            <div class="message-content">
                 <div class="message-header">
-                    <a href="#" class="message-username text-decoration-none fw-bold" data-username=""></a>
-                    <small class="message-time"></small>
+                    <a href="#" class="message-username">Username</a>
+                    <span class="message-time">Time</span>
                 </div>
-                <div class="message-content"></div>
+                <div class="message-text">Message content</div>
+                <div class="message-status">
+                    <i class="bi bi-check2-all"></i>
+                    <span>Sent</span>
+                </div>
+            </div>
+            <!-- Avatar for other-message (left) -->
+            <div class="avatar-sm message-avatar-other">
+                <img src="/static/avatars/default.png" 
+                     alt="Profile" 
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="avatar-fallback" style="display: none;">
+                    U
+                </div>
             </div>
         </div>
     </div>
@@ -132,7 +210,7 @@
 
 <!-- Chat Template (Hidden) -->
 <template id="chat-template">
-    <a href="#" class="list-group-item list-group-item-action chat-item">
+    <div class="list-group-item list-group-item-action chat-item" data-user-id="">
         <div class="d-flex align-items-center">
             <div class="flex-shrink-0">
                 <div class="avatar-sm bg-success rounded-circle d-flex align-items-center justify-content-center">
@@ -145,31 +223,358 @@
                     <small class="text-muted chat-time"></small>
                 </div>
                 <p class="mb-1 chat-preview text-truncate"></p>
-                <small class="text-muted chat-count"></small>
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted chat-count"></small>
+                    <div class="chat-actions">
+                        <button class="btn btn-sm btn-outline-danger delete-chat-btn" title="Delete Chat">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning block-user-btn" title="Block User">
+                            <i class="bi bi-slash-circle"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-success unblock-user-btn" title="Unblock User" style="display: none;">
+                            <i class="bi bi-check-circle"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
-    </a>
+        <a href="#" class="chat-link"></a>
+    </div>
 </template>
 
 <style>
     .mb-0{
         color: var(--text-primary);
     }
-/* Custom styles for PM specific elements */
+
+/* Enhanced PM Styles */
+.message-item {
+    margin-bottom: 1rem;
+    animation: fadeInUp 0.3s ease-out;
+}
+
+.message-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    position: relative;
+}
+
+/* Own messages (right side) */
+.message-item.own-message .message-row {
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+.message-item.own-message .message-content {
+    background: linear-gradient(135deg, var(--primary-color), #6366f1);
+    color: white;
+    border-radius: 1.25rem;
+    border-top-right-radius: 0.25rem;
+    border-top-left-radius: 1.25rem;
+    margin-left: auto;
+    max-width: 70%;
+    text-align: right;
+    align-items: flex-end;
+}
+
+.message-item.own-message .message-header {
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    text-align: right;
+}
+
+.message-item.own-message .message-username {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.message-item.own-message .message-time {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.message-item.own-message .message-status {
+    color: rgba(255, 255, 255, 0.8);
+    text-align: right;
+}
+
+/* Others' messages (left side) */
+.message-item.other-message .message-row {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-end;
+}
+
+.message-item.other-message .message-content {
+    background: var(--bg-secondary);
+    border-radius: 1.25rem;
+    border-top-left-radius: 0.25rem;
+    border-top-right-radius: 1.25rem;
+    margin-right: auto;
+    max-width: 70%;
+    text-align: left;
+    align-items: flex-start;
+}
+
+.message-item.other-message .message-header {
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.message-content {
+    padding: 0.75rem 1rem;
+    word-wrap: break-word;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.message-content:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.message-content.rtl {
+    border-radius: 1.25rem;
+    border-top-right-radius: 0.25rem;
+    border-top-left-radius: 1.25rem;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.message-username {
+    color: var(--primary-color);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.message-time {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.message-status {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Avatar Styles */
+.avatar-sm {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid var(--border-color);
+    margin: 0;
+    padding: 0;
+    vertical-align: middle;
+}
+
+.avatar-sm img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.avatar-fallback {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    border-radius: 50%;
+}
+
+/* Precise Avatar Positioning - Avatar BEFORE message */
+.message-avatar-own {
+    order: 1; /* Right side, before message */
+    margin-left: 0.75rem;
+    margin-right: 0;
+}
+
+.message-avatar-other {
+    order: 0; /* Left side, before message */
+    margin-right: 0.75rem;
+    margin-left: 0;
+}
+
+/* Hide/show avatars based on message type with precise positioning */
+.message-item.own-message .message-avatar-other {
+    display: none !important;
+}
+
+.message-item.own-message .message-avatar-own {
+    display: flex !important;
+    order: 1; /* Avatar before message on right */
+}
+
+.message-item.own-message .message-content {
+    order: 2; /* Message after avatar on right */
+}
+
+.message-item.other-message .message-avatar-own {
+    display: none !important;
+}
+
+.message-item.other-message .message-avatar-other {
+    display: flex !important;
+    order: 0; /* Avatar before message on left */
+}
+
+.message-item.other-message .message-content {
+    order: 1; /* Message after avatar on left */
+}
+
+/* Message Input Styles */
+.message-input {
+    border-radius: 1.5rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border-color);
+    background: var(--bg-secondary);
+    transition: all 0.2s ease;
+}
+
+.message-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.send-btn {
+    border-radius: 50%;
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.send-btn:hover {
+    transform: scale(1.05);
+}
+
+/* Search Results Dropdown */
+.search-results-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.search-result-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.search-result-item:hover {
+    background: var(--bg-secondary);
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item .avatar-sm {
+    width: 2rem;
+    height: 2rem;
+}
+
+/* Typing Indicator */
+.typing-bubble {
+    display: flex;
+    align-items: center;
+    background: var(--bg-secondary);
+    padding: 0.5rem 1rem;
+    border-radius: 1rem;
+    max-width: fit-content;
+}
+
+.typing-dots {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.typing-dots span {
+    width: 0.5rem;
+    height: 0.5rem;
+    background: var(--text-muted);
+    border-radius: 50%;
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+.typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing {
+    0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+    40% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Chat List Styles */
 .chat-item {
     border: none;
     border-bottom: 1px solid var(--border-color);
     border-radius: 0;
     transition: var(--transition-fast);
+    padding: 1rem;
+    position: relative;
 }
 
 .chat-item:hover {
     background: rgba(99, 102, 241, 0.1);
+    transform: translateX(4px);
+}
+
+.chat-item:hover .chat-actions {
+    display: flex !important;
+    gap: 0.25rem;
 }
 
 .chat-item.active {
     background: var(--primary-color);
     color: white;
+    transform: translateX(8px);
 }
 
 .chat-item.active .text-muted {
@@ -178,6 +583,52 @@
 
 .chat-item.active .chat-preview {
     color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.chat-link {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+}
+
+.chat-actions {
+    z-index: 2;
+    position: relative;
+}
+
+.chat-actions .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .message-content {
+        max-width: 85%;
+    }
+    
+    .search-results-dropdown {
+        max-height: 150px;
+    }
+}
+
+@media (max-width: 576px) {
+    .message-content {
+        max-width: 90%;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .message-input {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .send-btn {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
 }
 
 #chat-box {
@@ -198,40 +649,33 @@
     border-radius: 3px;
 }
 
-#chat-box::-webkit-scrollbar-thumb:hover {
-    background: var(--border-light);
+/* Connection Status Icon */
+#pm-status, #connection-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
 }
 
-.chat-preview {
-    max-width: 200px;
+#pm-status i, #connection-status i {
     font-size: 0.875rem;
 }
 
 @media (max-width: 768px) {
-    .col-md-4 {
-        margin-bottom: 1rem;
+    #pm-status, #connection-status {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
     }
     
-    .card {
-        min-height: 60vh !important;
-    }
-    
-    .chat-preview {
-        max-width: 150px;
+    #pm-status i, #connection-status i {
+        font-size: 0.8rem;
     }
 }
-    .bg-success ,.bg-info{
-        padding-top: 6.5%;
-    }
-    .btn-plus{
-        padding-top: 0.8rem;
-        font-size: 1.2rem;
-    }
 </style>
 
 {% if target_username %}
 <script>
-window.targetUser = '{{ target_username }}';
+window.targetUser = {{ target_username|tojson }};
+window.currentUserId = {{ current_user_id|tojson }};
 </script>
 {% endif %}
 

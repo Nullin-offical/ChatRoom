@@ -148,6 +148,44 @@
     margin-right: var(--spacing-md);
 }
 
+/* Mobile Sidebar Toggle Button */
+.mobile-sidebar-toggle {
+    background: var(--primary-color);
+    border: none;
+    color: white;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-md);
+}
+
+.mobile-sidebar-toggle:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Offcanvas improvements */
+.offcanvas {
+    background: var(--bg-card);
+    border-right: 1px solid var(--border-color);
+}
+
+.offcanvas-header {
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.offcanvas-title {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.offcanvas-body {
+    padding: 0;
+}
+
 /* Responsive spacing adjustments */
 @media (max-width: 768px) {
     #chat-box {
@@ -178,6 +216,31 @@
     .system-message {
         margin: var(--spacing-sm) var(--spacing-md);
         padding: var(--spacing-xs) var(--spacing-sm);
+    }
+    
+    /* Mobile-specific improvements */
+    .container-fluid {
+        padding-left: var(--spacing-sm);
+        padding-right: var(--spacing-sm);
+    }
+    
+    .card {
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+    }
+    
+    /* Better mobile input */
+    .message-input {
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+    
+    /* Mobile emoji picker positioning */
+    .emoji-picker-container {
+        position: fixed;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1050;
     }
 }
 
@@ -211,6 +274,38 @@
         margin: var(--spacing-xs) var(--spacing-sm);
         padding: var(--spacing-xs);
         font-size: 0.8rem;
+    }
+    
+    /* Extra small screen improvements */
+    .mobile-sidebar-toggle {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.9rem;
+    }
+    
+    .offcanvas {
+        width: 85%;
+    }
+    
+    /* Better touch targets */
+    .btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    .emoji-item {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* Improved mobile navigation */
+    .navbar-nav .nav-link {
+        padding: var(--spacing-md);
+        margin: var(--spacing-xs) 0;
+        border-radius: var(--radius-md);
+    }
+    
+    .navbar-nav .nav-link:hover {
+        background: var(--bg-secondary);
     }
 }
 
@@ -271,4 +366,77 @@
 .empty-state p {
     margin-bottom: var(--spacing-lg);
     font-size: 0.95rem;
+}
+
+/* Mobile-specific animations */
+@media (max-width: 768px) {
+    .message-item {
+        animation: slideInUp 0.3s ease-out;
+    }
+    
+    @keyframes slideInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* Smooth sidebar transitions */
+    .offcanvas {
+        transition: transform 0.3s ease-in-out;
+    }
+    
+    /* Better mobile scrolling */
+    #chat-box {
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
+    }
+    
+    /* Mobile-friendly buttons */
+    .btn {
+        touch-action: manipulation;
+    }
+    
+    /* Prevent text selection on interactive elements */
+    .room-item, .chat-item, .search-result-item {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .message-content {
+        border: 2px solid var(--text-primary);
+    }
+    
+    .btn {
+        border: 2px solid currentColor;
+    }
+    
+    .card {
+        border: 2px solid var(--border-color);
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .message-item,
+    .room-item,
+    .chat-item,
+    .btn,
+    .emoji-item {
+        animation: none;
+        transition: none;
+    }
+    
+    .typing-dots span {
+        animation: none;
+    }
 } 
