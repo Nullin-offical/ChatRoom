@@ -35,7 +35,7 @@
                 <h5 class="offcanvas-title" id="sidebarOffcanvasLabel">
                     <i class="bi bi-door-open me-2"></i>Chat Rooms
                 </h5>
-                <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close" style="filter: brightness(0) invert(1);"></button>
             </div>
             <div class="offcanvas-body p-0">
                 <div id="room-list-mobile" class="list-group list-group-flush">
@@ -232,10 +232,12 @@
 </div>
 
 <style>
-    .mb-3,.mb-0{
-        color: var(--text-primary);
+    .mb-3,.mb-0 , .mb-1{
+        color: var(--text-primary); !important;
   }
-
+    button.btn-close.text-reset{
+        color: var(--text-primary)!important;
+    }
 /* Enhanced Chat Styles */
 .message-item {
     margin-bottom: 1rem;

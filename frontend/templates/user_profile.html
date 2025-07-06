@@ -9,41 +9,47 @@
                 <!-- Profile Header -->
                 <div class="card-header bg-transparent border-0 text-center py-4">
                     <div class="position-relative d-inline-block mb-3">
-                        <div class="rounded-circle overflow-hidden" 
+                        <div class="rounded-circle overflow-hidden"
                              style="width: 120px; height: 120px; background: var(--color-primary); display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 700; color: white; border: 3px solid rgba(79,140,255,0.3);">
                             {% if target_user.profile_image %}
-                                <img src="{{ target_user.profile_image }}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover;">
+                            <img src="{{ target_user.profile_image }}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover;">
                             {% else %}
-      {{ target_user.username[0]|upper }}
+                            {{ target_user.username[0]|upper }}
                             {% endif %}
                         </div>
                         {% if target_user.is_online %}
-                            <div class="position-absolute bottom-0 end-0 bg-success rounded-circle" 
-                                 style="width: 25px; height: 25px; border: 3px solid rgba(35,38,47,0.92);"></div>
+                        <div class="position-absolute bottom-0 end-0 bg-success rounded-circle"
+                             style="width: 25px; height: 25px; border: 3px solid rgba(35,38,47,0.92);"></div>
                         {% endif %}
-    </div>
-                    
+                    </div>
+
                     <h2 class="mb-1" style="color: var(--text-primary); font-weight: 700;">
                         {{ target_user.display_name or target_user.username }}
                     </h2>
-                    
+
                     {% if target_user.display_name and target_user.display_name != target_user.username %}
-                        <p class="text-muted mb-3">@{{ target_user.username }}</p>
+                    <p class="text-muted mb-3">@{{ target_user.username }}</p>
                     {% endif %}
-                    
-                    <div class="d-flex justify-content-center gap-2 mb-3">
-    {% if not is_self %}
-                            <a href="/pm/{{ target_user.username }}" class="btn btn-primary">
-                                <i class="bi bi-chat-dots me-2"></i>Send Message
-                            </a>
+
+                    <div class="d-flex justify-content-center gap-3 mb-3 flex-wrap">
+                        {% if not is_self %}
+                        <a href="/pm/{{ target_user.username }}" class="btn btn-primary" style="padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--color-primary), var(--color-accent));">
+                            <i class="bi bi-chat-dots me-2"></i>Send Message
+                        </a>
+                        <button class="btn btn-outline-info" style="padding: 0.75rem 1.5rem;" onclick="copyUsername('{{ target_user.username }}')">
+                            <i class="bi bi-clipboard me-2"></i>Copy Username
+                        </button>
                         {% else %}
-                            <a href="/profile" class="btn btn-secondary">
-                                <i class="bi bi-gear me-2"></i>Edit Profile
-                            </a>
+                        <a href="/profile" class="btn btn-secondary" style="padding: 0.75rem 1.5rem;">
+                            <i class="bi bi-gear me-2"></i>Edit Profile
+                        </a>
+                        <button class="btn btn-outline-info" style="padding: 0.75rem 1.5rem;" onclick="copyUsername('{{ target_user.username }}')">
+                            <i class="bi bi-clipboard me-2"></i>Copy Username
+                        </button>
                         {% endif %}
                     </div>
                 </div>
-                
+
                 <!-- Profile Information -->
                 <div class="card-body p-4">
                     <!-- Bio Section -->
@@ -57,11 +63,11 @@
                             </div>
                         </div>
                     {% endif %}
-                    
+
                                          <!-- User Information -->
                      <div class="row">
                          <div class="col-md-6">
-                            
+
                             {% if target_user.birth_date %}
                                 <div class="mb-3">
                                     <label class="form-label text-muted">
@@ -73,7 +79,7 @@
                                 </div>
                             {% endif %}
                         </div>
-                        
+
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label class="form-label text-muted">
@@ -83,13 +89,13 @@
                                     <span style="color: var(--text-primary);">{{ target_user.created_at }}</span>
                                 </div>
                             </div>
-                            
+
                             <div class="mb-3">
                                 <label class="form-label text-muted">
                                     <i class="bi bi-circle me-2"></i>Status
                                 </label>
                                 <div class="p-2 rounded" style="background: rgba(40,44,54,0.5);">
-                                    <span id="user-status-{{ target_user.username }}" 
+                                    <span id="user-status-{{ target_user.username }}"
                                           class="{% if target_user.is_online %}text-success{% else %}text-muted{% endif %}"
                                           data-username="{{ target_user.username }}">
                                         {% if target_user.is_online %}
@@ -102,26 +108,16 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- Additional Actions -->
                     {% if not is_self %}
                         <div class="text-center mt-4 pt-3 border-top" style="border-color: rgba(79,140,255,0.2) !important;">
-                            <div class="row">
-                                <div class="col-md-3">
-                                    <a href="/pm/{{ target_user.username }}" class="btn btn-outline-primary w-100">
-                                        <i class="bi bi-envelope me-2"></i>Message
-                                    </a>
-                                </div>
-                                <div class="col-md-3">
-                                    <a href="/chat" class="btn btn-outline-secondary w-100">
-                                        <i class="bi bi-people me-2"></i>View in Chat
-                                    </a>
-                                </div>
-                                <div class="col-md-3">
-                                    <button class="btn btn-outline-info w-100" onclick="copyUsername('{{ target_user.username }}')">
-                                        <i class="bi bi-clipboard me-2"></i>Copy Username
-                                    </button>
-                                </div>
+<!--                            <div class="row">-->
+<!--                                <div class="col-md-3" style="width:100% ">-->
+<!--                                    <button  class="btn btn-outline-info w-100" onclick="copyUsername('{{ target_user.username }}')">-->
+<!--                                        <i class="bi bi-clipboard me-2": revert"></i>Copy Username-->
+<!--                                    </button>-->
+<!--                                </div>-->
                                 <div class="col-md-3">
                                     <div class="btn-group w-100" role="group">
                                         <button type="button" class="btn btn-outline-danger" id="delete-chat-btn" title="Delete Chat" data-user-id="{{ target_user.id }}" data-username="{{ target_user.username }}">
@@ -202,6 +198,33 @@
         margin-bottom: 1rem;
     }
 }
+.w-100{
+    color: white;
+    border: 1rem solid var(--color-primary);
+    margin-top: 1rem;
+}
+a.btn.btn-primary {
+    background: #4f46e5 !important;
+}
+
+
+button.btn.btn-outline-info.w-100 {
+    background-color: var(--color-primary);
+}
+a.btn.btn-outline-secondary.w-100{
+background: #6c757d;
+    border-color: white;
+}
+a.btn.btn-outline-primary.w-100 {
+    background-color: #0d6efd;
+}
+button.btn.btn-outline-info.w-100 {
+    background-color: #4f46e5;
+
+}
+button.btn.btn-outline-info {
+    background: aliceblue;
+}
 </style>
 
 <script>
@@ -213,7 +236,7 @@ function copyUsername(username) {
         button.innerHTML = '<i class="bi bi-check me-2"></i>Copied!';
         button.classList.remove('btn-outline-info');
         button.classList.add('btn-success');
-        
+
         setTimeout(() => {
             button.innerHTML = originalText;
             button.classList.remove('btn-success');
@@ -229,12 +252,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteChatBtn = document.getElementById('delete-chat-btn');
     const blockUserBtn = document.getElementById('block-user-btn');
     const unblockUserBtn = document.getElementById('unblock-user-btn');
-    
+
     if (deleteChatBtn) {
         deleteChatBtn.addEventListener('click', function() {
             const userId = this.getAttribute('data-user-id');
             const username = this.getAttribute('data-username');
-            
+
             if (confirm(`Are you sure you want to delete your chat with ${username}? This action cannot be undone.`)) {
                 fetch(`/api/delete_chat/${userId}`, {
                     method: 'POST',
@@ -259,12 +282,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
+
     if (blockUserBtn) {
         blockUserBtn.addEventListener('click', function() {
             const userId = this.getAttribute('data-user-id');
             const username = this.getAttribute('data-username');
-            
+
             if (confirm(`Are you sure you want to block ${username}? You will not be able to send or receive messages from them.`)) {
                 fetch(`/api/block_user/${userId}`, {
                     method: 'POST',
@@ -290,12 +313,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
+
     if (unblockUserBtn) {
         unblockUserBtn.addEventListener('click', function() {
             const userId = this.getAttribute('data-user-id');
             const username = this.getAttribute('data-username');
-            
+
             if (confirm(`Are you sure you want to unblock ${username}? You will be able to send and receive messages from them again.`)) {
                 fetch(`/api/unblock_user/${userId}`, {
                     method: 'POST',
@@ -321,7 +344,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
+
     // Check if user is blocked and show appropriate button
     const userId = deleteChatBtn ? deleteChatBtn.getAttribute('data-user-id') : null;
     if (userId) {
