@@ -3,6 +3,7 @@ import os
 from flask_login import UserMixin
 import bcrypt
 
+# Use environment variable for database path in production
 DB_PATH = os.path.join(os.path.dirname(__file__), 'db', 'chatroom.db')
 
 class User(UserMixin):

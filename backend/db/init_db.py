@@ -8,8 +8,8 @@ DB_PATH = os.path.join(BASE_DIR, 'chatroom.db')
 SCHEMA_PATH = os.path.join(os.path.dirname(BASE_DIR), 'models', 'schema.sql')
 
 DEFAULT_ADMIN = {
-    'username': 'admin',
-    'email': 'shayan@gmail.com',
+    'username': 'shayan',
+    'email': 'shayanqasmy@gmail.com',
     'password': 'shayan.1400'
 }
 

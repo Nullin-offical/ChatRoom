@@ -6,11 +6,23 @@ from auth import User, register_user, authenticate_user, get_user_by_id
 from auth import get_user_by_username
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 import re
 import glob
 from security import security_manager, check_message_security, sanitize_user_input, log_security_event
+from logging_config import setup_logging, log_request_info, log_error_with_context
+import threading
+import time
+from werkzeug.security import check_password_hash, generate_password_hash
+
+# Initialize database on import (for cPanel deployment)
+try:
+    from db.init_db import init_db
+    init_db()
+    print("Database initialized successfully")
+except Exception as e:
+    print(f"Database initialization error: {e}")
 
 def slugify(value):
     value = str(value)
@@ -20,10 +32,33 @@ def slugify(value):
     return value.strip('-')
 
 # --- App Config ---
-app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
+app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static', static_url_path='/static')
+
+# Load production configuration if in production mode
+if os.environ.get('FLASK_ENV') == 'production':
+    try:
+        from production import config as production_config
+        app.config.from_object(production_config)
+        print("Production configuration loaded")
+    except ImportError:
+        print("Production config not found, using default settings")
+        app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
+        app.config['DEBUG'] = False
+else:
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
+    app.config['DEBUG'] = True
+
 CORS(app)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key')
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Setup logging
+loggers = setup_logging()
+app_logger = loggers['app']
+db_logger = loggers['database']
+socket_logger = loggers['socketio']
+auth_logger = loggers['auth']
+
+app_logger.info("Initializing Flask application...")
 
 # --- Login Manager ---
 login_manager = LoginManager()
@@ -37,15 +72,25 @@ def load_user(user_id):
 # --- Error Handlers ---
 @app.errorhandler(404)
 def not_found(e):
+    app_logger.warning(f"404 Error: {request.url} - {request.remote_addr}")
     return render_template('base.html', content='<div class="text-center py-5"><h2>404 - Not Found</h2><p>The page you are looking for does not exist.</p></div>'), 404
 
 @app.errorhandler(403)
 def forbidden(e):
+    app_logger.warning(f"403 Error: {request.url} - {request.remote_addr}")
     return render_template('base.html', content='<div class="text-center py-5"><h2>403 - Forbidden</h2><p>You do not have permission to access this page.</p></div>'), 403
 
 @app.errorhandler(500)
 def server_error(e):
+    log_error_with_context(e, app_logger, f"URL: {request.url}, IP: {request.remote_addr}")
     return render_template('base.html', content='<div class="text-center py-5"><h2>500 - Server Error</h2><p>Something went wrong. Please try again later.</p></div>'), 500
+
+# Add request logging middleware
+@app.before_request
+def log_request():
+    # Only log in development mode to improve production performance
+    if app.config.get('DEBUG', False):
+        log_request_info(request, app_logger)
 
 # --- Helper Functions ---
 def format_join_date(date_str):
@@ -65,32 +110,73 @@ def format_join_date(date_str):
     except:
         return str(date_str) if date_str else 'Unknown'
 
+def check_room_access(room_slug, user_id):
+    """Check if user can access a room (including password verification)"""
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT id, name, password, is_hidden FROM rooms WHERE slug=?', (room_slug,))
+        room = cur.fetchone()
+        
+        if not room:
+            return False, "Room not found"
+        
+        room_id, room_name, room_password, is_hidden = room
+        
+        # Check if room is hidden (admin only)
+        if is_hidden:
+            cur.execute('SELECT is_admin FROM users WHERE id = ?', (user_id,))
+            user = cur.fetchone()
+            if not user or not user[0]:
+                return False, "Access denied - Hidden room"
+        
+        # Check if room has password
+        if room_password:
+            # Check if user has verified password in session
+            session_key = f'room_access_{room_slug}'
+            if not session.get(session_key):
+                return False, "Password required"
+        
+        return True, room_id
+
 # --- Database Helper ---
 def get_db():
-    db_path = os.path.join(os.path.dirname(__file__), 'db', 'chatroom.db')
-    return sqlite3.connect(db_path)
+    try:
+        db_logger.debug("Getting database connection")
+        # Handle case where __file__ is not defined (e.g., in background threads)
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), 'db', 'chatroom.db')
+        except NameError:
+            # Fallback for background threads or when __file__ is not available
+            db_path = os.path.join(os.getcwd(), 'db', 'chatroom.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        db_logger.error(f"Database connection error: {e}")
+        raise
 
 # --- Main Routes ---
 @app.route('/')
 def home():
     with get_db() as conn:
         cur = conn.cursor()
-        # Get stats for home page
+        # Get stats for home page - optimized queries
         cur.execute('SELECT COUNT(*) FROM users')
         user_count = cur.fetchone()[0]
         
         cur.execute('SELECT COUNT(*) FROM messages')
         message_count = cur.fetchone()[0]
         
-        cur.execute('SELECT COUNT(*) FROM rooms')
+        # Count only non-hidden rooms
+        cur.execute('SELECT COUNT(*) FROM rooms WHERE hidden = 0')
         room_count = cur.fetchone()[0]
         
-        # Get recent rooms
-        cur.execute('SELECT name, slug, created_at FROM rooms ORDER BY created_at DESC LIMIT 6')
+        # Get recent non-hidden rooms - limit to 3 for better performance
+        cur.execute('SELECT name, slug, created_at FROM rooms WHERE hidden = 0 ORDER BY created_at DESC LIMIT 3')
         recent_rooms = [dict(name=row[0], slug=row[1], created_at=row[2]) for row in cur.fetchall()]
         
-        # Get recent users
-        cur.execute('SELECT username, display_name, created_at FROM users ORDER BY created_at DESC LIMIT 6')
+        # Get recent users - limit to 3 for better performance
+        cur.execute('SELECT username, display_name, created_at FROM users ORDER BY created_at DESC LIMIT 3')
         recent_users = [dict(username=row[0], display_name=row[1] or row[0], created_at=row[2]) for row in cur.fetchall()]
     
     return render_template('home.html', 
@@ -143,19 +229,33 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
+        app_logger.info(f"Login attempt for user: {username}")
+        
         # Check login attempts
         login_ok, login_msg = security_manager.check_login_attempts(username)
         if not login_ok:
             error = login_msg
+            app_logger.warning(f"Login blocked for {username}: {login_msg}")
         else:
             user = authenticate_user(username, password)
             if user:
                 security_manager.record_login_attempt(username, success=True)
                 login_user(user)
-                return redirect(url_for('dashboard'))
+                app_logger.info(f"User {username} logged in successfully")
+                
+                # Get the next parameter for redirect
+                next_page = request.args.get('next')
+                if next_page and next_page.startswith('/'):
+                    app_logger.info(f"Redirecting {username} to: {next_page}")
+                    return redirect(next_page)
+                else:
+                    app_logger.info(f"Redirecting {username} to dashboard")
+                    return redirect(url_for('dashboard'))
             else:
                 security_manager.record_login_attempt(username, success=False)
                 error = 'Invalid username or password.'
+                app_logger.warning(f"Failed login attempt for {username}")
+    
     return render_template('login.html', error=error)
 
 @app.route('/logout')
@@ -179,15 +279,16 @@ def dashboard():
         cur.execute('SELECT id, sender_id, content, timestamp FROM messages')
         messages = [dict(id=row[0], sender_id=row[1], content=row[2], timestamp=row[3]) for row in cur.fetchall()]
         
-        # Get recent messages with user info
+        # Get recent messages with user info (only current user's messages)
         cur.execute('''
             SELECT messages.id, users.username, messages.content, messages.timestamp, rooms.name as room_name 
             FROM messages 
             JOIN users ON messages.sender_id = users.id 
             LEFT JOIN rooms ON messages.room_id = rooms.id 
+            WHERE messages.sender_id = ?
             ORDER BY messages.timestamp DESC 
             LIMIT 10
-        ''')
+        ''', (current_user.id,))
         recent_messages = [dict(id=row[0], username=row[1], content=row[2], timestamp=row[3], room_name=row[4] or 'General') for row in cur.fetchall()]
         
         # Get user stats
@@ -200,9 +301,7 @@ def dashboard():
         cur.execute('SELECT COUNT(*) FROM private_messages WHERE sender_id = ? OR receiver_id = ?', (current_user.id, current_user.id))
         user_pm_count = cur.fetchone()[0]
     
-    rooms = fetch_rooms()
     return render_template('dashboard.html', 
-                         rooms=rooms, 
                          users=users, 
                          messages=messages, 
                          recent_messages=recent_messages,
@@ -417,10 +516,44 @@ def fetch_rooms():
     print('fetch_rooms() called')
     with get_db() as conn:
         cur = conn.cursor()
+        # Get all non-hidden rooms
         cur.execute('SELECT id, name, slug, password, created_at, hidden FROM rooms WHERE hidden = 0 ORDER BY created_at ASC')
-        rooms = [dict(id=row[0], name=row[1], slug=row[2], has_password=bool(row[3]), created_at=row[4], hidden=bool(row[5])) for row in cur.fetchall()]
-        print(f'fetch_rooms() returning {len(rooms)} rooms: {rooms}')
-        return rooms
+        all_rooms = cur.fetchall()
+        
+        # Filter rooms based on user access
+        accessible_rooms = []
+        for row in all_rooms:
+            room_id, name, slug, password, created_at, hidden = row
+            has_password = bool(password)
+            
+            # If room has password, check if user has access
+            if has_password:
+                # Check if user has verified password for this room
+                if hasattr(current_user, 'id'):
+                    # Check session for password verification
+                    password_verified = session.get(f'room_access_{slug}', False)
+                    if password_verified:
+                        accessible_rooms.append(dict(
+                            id=room_id, 
+                            name=name, 
+                            slug=slug, 
+                            has_password=has_password, 
+                            created_at=created_at, 
+                            hidden=bool(hidden)
+                        ))
+            else:
+                # No password required, always accessible
+                accessible_rooms.append(dict(
+                    id=room_id, 
+                    name=name, 
+                    slug=slug, 
+                    has_password=has_password, 
+                    created_at=created_at, 
+                    hidden=bool(hidden)
+                ))
+        
+        print(f'fetch_rooms() returning {len(accessible_rooms)} accessible rooms: {accessible_rooms}')
+        return accessible_rooms
 
 def fetch_all_rooms():
     """Fetch all rooms including hidden ones for admin panel"""
@@ -440,42 +573,136 @@ def handle_get_rooms():
 @app.route('/chat/room/<room_slug>')
 @login_required
 def chat_room(room_slug):
-    # Validate room exists
+    # Validate room exists and user has access
+    access_ok, access_msg = check_room_access(room_slug, current_user.id)
+    
+    if not access_ok:
+        if "Password required" in access_msg:
+            # Redirect to password entry page
+            return redirect(url_for('room_password_page', room_slug=room_slug))
+        else:
+            flash(access_msg, 'error')
+            return redirect(url_for('chat'))
+    
+    # Get room details
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
+        cur.execute('SELECT id, name, slug FROM rooms WHERE slug=?', (room_slug,))
         room = cur.fetchone()
-    if not room:
-        flash('Room not found.', 'danger')
-        return redirect(url_for('chat'))
+        
+        if not room:
+            flash('Room not found', 'error')
+            return redirect(url_for('chat'))
+        
+        room_id, room_name, room_slug = room
     
-    room_data = {
-        'id': room[0], 
-        'name': room[1], 
-        'slug': room_slug, 
-        'has_password': bool(room[2]),
-        'password_verified': session.get(f'room_access_{room_slug}', False)
-    }
-    
-    return render_template('chat.html', room=room_data, current_user_username=current_user.username)
+    return render_template('chat_room.html', room_name=room_name, room_slug=room_slug)
 
 @app.route('/chat/room/<room_slug>/join', methods=['POST'])
 @login_required
 def join_room_with_password(room_slug):
+    """Join a password-protected room with rate limiting"""
     password = request.form.get('password', '').strip()
+    
+    if not password:
+        flash('Password is required', 'error')
+        return redirect(url_for('room_password_page', room_slug=room_slug))
+    
+    # Rate limiting for password attempts
+    session_key = f'password_attempts_{room_slug}'
+    attempts = session.get(session_key, {'count': 0, 'first_attempt': None})
+    
+    # Check if user is rate limited
+    if attempts['count'] >= 5:
+        if attempts['first_attempt']:
+            time_diff = datetime.now() - attempts['first_attempt']
+            if time_diff.total_seconds() < 300:  # 5 minutes
+                remaining_time = int((300 - time_diff.total_seconds()) / 60)
+                flash(f'Too many password attempts. Try again in {remaining_time} minutes.', 'error')
+                return redirect(url_for('room_password_page', room_slug=room_slug))
+            else:
+                # Reset attempts after 5 minutes
+                attempts = {'count': 0, 'first_attempt': None}
+    
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
         room = cur.fetchone()
+        
+        if not room:
+            flash('Room not found', 'error')
+            return redirect(url_for('chat'))
+        
+        room_id, room_name, room_password = room
+        
+        # Verify password
+        if not room_password or not check_password_hash(room_password, password):
+            # Increment attempt counter
+            if attempts['count'] == 0:
+                attempts['first_attempt'] = datetime.now()
+            attempts['count'] += 1
+            session[session_key] = attempts
+            
+            remaining_attempts = 5 - attempts['count']
+            if remaining_attempts > 0:
+                flash(f'Incorrect password. {remaining_attempts} attempts remaining.', 'error')
+            else:
+                flash('Too many incorrect attempts. Try again in 5 minutes.', 'error')
+            
+            return redirect(url_for('room_password_page', room_slug=room_slug))
+        
+        # Password is correct - clear attempts and grant access
+        session.pop(session_key, None)  # Clear attempts
+        session[f'room_access_{room_slug}'] = True
+        flash(f'Successfully joined {room_name}', 'success')
+        
+    return redirect(url_for('chat_room', room_slug=room_slug))
+
+@app.route('/chat/room/<room_slug>/password')
+@login_required
+def room_password_page(room_slug):
+    """Page for entering password to access password-protected room"""
+    # Validate room exists and has password
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
+        room = cur.fetchone()
+    
     if not room:
-        return jsonify({'success': False, 'error': 'Room not found.'}), 404
+        flash('Room not found.', 'danger')
+        return redirect(url_for('chat'))
     
-    if room[2] and room[2] != password:
-        return jsonify({'success': False, 'error': 'Incorrect password.'}), 401
+    room_id, room_name, room_password = room
     
-    # Store successful password verification in session
-    session[f'room_access_{room_slug}'] = True
-    return jsonify({'success': True, 'redirect': url_for('chat_room', room_slug=room_slug)})
+    if not room_password:
+        # Room doesn't have password, redirect to room
+        return redirect(url_for('chat_room', room_slug=room_slug))
+    
+    # Check if user already has access
+    if session.get(f'room_access_{room_slug}', False):
+        return redirect(url_for('chat_room', room_slug=room_slug))
+    
+    # Check rate limiting status
+    session_key = f'password_attempts_{room_slug}'
+    attempts = session.get(session_key, {'count': 0, 'first_attempt': None})
+    
+    rate_limited = False
+    remaining_time = 0
+    
+    if attempts['count'] >= 5 and attempts['first_attempt']:
+        time_diff = datetime.now() - attempts['first_attempt']
+        if time_diff.total_seconds() < 300:  # 5 minutes
+            rate_limited = True
+            remaining_time = int((300 - time_diff.total_seconds()) / 60)
+        else:
+            # Reset attempts after 5 minutes
+            session.pop(session_key, None)
+    
+    return render_template('room_password.html', 
+                         room={'name': room_name, 'slug': room_slug},
+                         rate_limited=rate_limited,
+                         remaining_time=remaining_time,
+                         attempts_remaining=5 - attempts['count'] if not rate_limited else 0)
 
 # --- SocketIO Handlers ---
 @socketio.on('connect')
@@ -501,18 +728,15 @@ def handle_connect(auth=None):
 @socketio.on('disconnect')
 def handle_disconnect():
     print('Client disconnected')
-    # Update user's offline status if they were logged in
+    # Don't immediately mark user as offline - they might reconnect
+    # Only update last_seen timestamp
     if hasattr(current_user, 'id'):
         with get_db() as conn:
             cur = conn.cursor()
             cur.execute('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id,))
             conn.commit()
-        # Broadcast offline status to all users
-        socketio.emit('user_status_change', {
-            'user_id': current_user.id,
-            'username': current_user.username,
-            'status': 'offline'
-        })
+        # Don't broadcast offline status immediately - wait for reconnection timeout
+        # The user will be marked offline after 5 minutes of inactivity
 
 @socketio.on('join_room')
 @login_required
@@ -520,6 +744,14 @@ def handle_join_room(data):
     room_slug = data.get('room')
     if not room_slug:
         return
+    
+    # Check room access
+    access_ok, access_msg = check_room_access(room_slug, current_user.id)
+    if not access_ok:
+        print(f"User {current_user.username} tried to join room {room_slug}: {access_msg}")
+        emit('error', {'message': access_msg})
+        return
+    
     join_room(room_slug)
     print(f'{current_user.username} joined room {room_slug}')
     # Announce user joining to the room
@@ -542,12 +774,12 @@ def handle_send_message(data):
     print(f"send_message event received from {current_user.username}: {data}")
     content = data.get('content', '').strip()
     room_slug = data.get('room')
-    
+
     if not content:
         print("No content provided")
         emit('error', {'message': 'Message content is required'})
         return
-    
+
     if not room_slug:
         print("No room provided")
         emit('error', {'message': 'Room is required'})
@@ -563,7 +795,14 @@ def handle_send_message(data):
     # Sanitize content
     content = sanitize_user_input(content)
     
-    # Simpler: Just get room id by slug
+    # Check room access (including password verification)
+    access_ok, access_msg = check_room_access(room_slug, current_user.id)
+    if not access_ok:
+        print(f"User {current_user.username} tried to send message to room {room_slug}: {access_msg}")
+        emit('error', {'message': access_msg})
+        return
+    
+    # Get room ID and save message
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute('SELECT id FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
@@ -573,7 +812,7 @@ def handle_send_message(data):
             print(f"Room not found: {room_slug}")
             emit('error', {'message': 'Room not found'})
             return 
-        
+
         room_id = room_data[0]
         print(f"Found room ID: {room_id}")
 
@@ -616,26 +855,31 @@ def handle_send_message(data):
 @socketio.on('get_chat_history')
 @login_required
 def handle_get_chat_history(data):
-    print(f"get_chat_history event received from {current_user.username}: {data}")
+    """Handle chat history request"""
     room_slug = data.get('room')
+    
     if not room_slug:
-        print("No room provided")
+        emit('error', {'message': 'Room is required'})
         return
-        
+    
+    # Check room access (including password verification)
+    access_ok, access_msg = check_room_access(room_slug, current_user.id)
+    if not access_ok:
+        emit('error', {'message': access_msg})
+        return
+    
     with get_db() as conn:
         cur = conn.cursor()
-        # Optimized: Use indexed lookup for room
+        # Get room ID
         cur.execute('SELECT id FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
         room = cur.fetchone()
         if not room:
-            print(f"Room not found: {room_slug}")
-            emit('chat_history', [])
+            emit('error', {'message': 'Room not found'})
             return
         
         room_id = room[0]
-        print(f"Loading chat history for room ID: {room_id}")
         
-        # Optimized query: Limit to last 100 messages, use proper indexing
+        # Get chat history
         cur.execute('''
             SELECT m.content, m.timestamp, u.username, u.display_name, u.profile_image, r.slug as room_slug
             FROM messages m
@@ -652,9 +896,8 @@ def handle_get_chat_history(data):
             {'content': row[0], 'timestamp': row[1], 'username': row[2], 'display_name': row[3], 'profile_image': row[4], 'room_slug': row[5]} 
             for row in reversed(rows)
         ]
-        print(f"Found {len(messages)} messages for room {room_slug}")
         
-    emit('chat_history', messages)
+    emit('chat_history', {'messages': messages})
 
 # --- Helper for PM room name ---
 
@@ -738,7 +981,7 @@ def api_search_users():
                 'username': row[1],
                 'display_name': row[2] or row[1]
             })
-        return jsonify(results)
+    return jsonify(results)
 
 @app.route('/api/pm_chats')
 @login_required
@@ -1077,28 +1320,26 @@ def handle_send_pm(data):
             }
             
             print(f"Prepared message: {message}")
-        
-        # Send to PM room
-        room_name = _pm_room_name(current_user.id, target_user.id)
-        print(f"Emitting to room: {room_name}")
-        socketio.emit('new_pm', message, room=room_name)
-        
-        # Send notification to receiver
-        notification = {
-            'type': 'pm',
-            'from': current_user.username,
-            'message': content[:50] + '...' if len(content) > 50 else content,
-            'timestamp': row[1]
-        }
-        socketio.emit('notification', notification, room=f'user_{target_user.id}')
-        
-        print("PM sent successfully")
-        
+            
+            # Send to PM room
+            room_name = _pm_room_name(current_user.id, target_user.id)
+            print(f"Emitting to room: {room_name}")
+            socketio.emit('new_pm', message, room=room_name)
+            
+            # Send notification to receiver
+            notification = {
+                'type': 'pm',
+                'from': current_user.username,
+                'message': content[:50] + '...' if len(content) > 50 else content,
+                'timestamp': row[1]
+            }
+            socketio.emit('notification', notification, room=f'user_{target_user.id}')
+            
+            print("PM sent successfully")
+            
     except Exception as e:
         print(f"Error sending PM: {e}")
-        import traceback
-        traceback.print_exc()
-        emit('error', {'message': 'Failed to send message'})
+        emit('error', {'message': 'Internal server error'})
 
 @socketio.on('get_pm_history')
 @login_required
@@ -1333,8 +1574,361 @@ def api_get_rooms():
     rooms = fetch_rooms()
     return jsonify(rooms)
 
-# --- Main Entrypoint ---
+@app.route('/api/send_message', methods=['POST'])
+@login_required
+def api_send_message():
+    """API endpoint to send a message"""
+    data = request.get_json()
+    content = data.get('content', '').strip()
+    room_slug = data.get('room')
+
+    if not content:
+        return jsonify({'success': False, 'error': 'Message content is required'}), 400
+
+    if not room_slug:
+        return jsonify({'success': False, 'error': 'Room is required'}), 400
+    
+    # Security checks
+    security_ok, security_msg = check_message_security(current_user.id, content)
+    if not security_ok:
+        return jsonify({'success': False, 'error': security_msg}), 400
+    
+    # Sanitize content
+    content = sanitize_user_input(content)
+    
+    # Check room access (including password verification)
+    access_ok, access_msg = check_room_access(room_slug, current_user.id)
+    if not access_ok:
+        return jsonify({'success': False, 'error': access_msg}), 403
+    
+    # Get room ID and save message
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT id FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
+        room_data = cur.fetchone()
+        
+        if not room_data:
+            return jsonify({'success': False, 'error': 'Room not found'}), 404
+
+        room_id = room_data[0]
+
+        # Insert message and get ID in one operation
+        cur.execute(
+            'INSERT INTO messages (sender_id, room_id, content, timestamp) VALUES (?, ?, ?, ?)',
+            (current_user.id, room_id, content, datetime.now().isoformat())
+        )
+        message_id = cur.lastrowid
+        conn.commit()
+
+        # Get message data with user info
+        cur.execute('''
+            SELECT m.content, m.timestamp, u.username, u.display_name, u.profile_image, r.slug as room_slug
+            FROM messages m
+            INNER JOIN users u ON m.sender_id = u.id
+            INNER JOIN rooms r ON m.room_id = r.id
+            WHERE m.id = ?
+        ''', (message_id,))
+        msg_row = cur.fetchone()
+        
+        if not msg_row:
+            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+            
+        msg = {
+            'username': msg_row[2],
+            'display_name': msg_row[3] or msg_row[2],
+            'content': msg_row[0],
+            'timestamp': msg_row[1],
+            'profile_image': msg_row[4] or 'default.png',
+            'room_slug': msg_row[5]
+        }
+    
+    return jsonify({'success': True, 'message': msg})
+
+@app.route('/api/chat_history/<room_slug>')
+@login_required
+def api_chat_history(room_slug):
+    """API endpoint to get chat history"""
+    # Check room access (including password verification)
+    access_ok, access_msg = check_room_access(room_slug, current_user.id)
+    if not access_ok:
+        return jsonify({'success': False, 'error': access_msg}), 403
+        
+    with get_db() as conn:
+        cur = conn.cursor()
+        # Get room ID
+        cur.execute('SELECT id FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
+        room = cur.fetchone()
+        if not room:
+            return jsonify({'success': False, 'error': 'Room not found'}), 404
+        
+        room_id = room[0]
+        
+        # Get chat history
+        cur.execute('''
+            SELECT m.content, m.timestamp, u.username, u.display_name, u.profile_image, r.slug as room_slug
+            FROM messages m
+            INNER JOIN users u ON m.sender_id = u.id
+            INNER JOIN rooms r ON m.room_id = r.id
+            WHERE m.room_id = ?
+            ORDER BY m.timestamp DESC
+            LIMIT 100
+        ''', (room_id,))
+        
+        # Reverse the results to get chronological order
+        rows = cur.fetchall()
+        messages = [
+            {'content': row[0], 'timestamp': row[1], 'username': row[2], 'display_name': row[3], 'profile_image': row[4], 'room_slug': row[5]} 
+            for row in reversed(rows)
+        ]
+        
+    return jsonify({'success': True, 'messages': messages})
+
+@app.route('/api/send_pm', methods=['POST'])
+@login_required
+def api_send_pm():
+    """API endpoint to send a private message"""
+    data = request.get_json()
+    content = data.get('content', '').strip()
+    recipient = data.get('recipient')
+
+    if not content:
+        return jsonify({'success': False, 'error': 'Message content is required'}), 400
+
+    if not recipient:
+        return jsonify({'success': False, 'error': 'Recipient is required'}), 400
+    
+    # Security checks
+    security_ok, security_msg = check_message_security(current_user.id, content)
+    if not security_ok:
+        return jsonify({'success': False, 'error': security_msg}), 400
+    
+    # Sanitize content
+    content = sanitize_user_input(content)
+    
+    # Validate recipient exists and is not the current user
+    target_user = get_user_by_username(recipient)
+    if not target_user:
+        return jsonify({'success': False, 'error': f'User "{recipient}" not found'}), 404
+    
+    if target_user.id == current_user.id:
+        return jsonify({'success': False, 'error': 'Cannot send message to yourself'}), 400
+    
+    # Check if either user has blocked the other
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT 1 FROM user_blocks 
+            WHERE (blocker_id = ? AND blocked_id = ?) 
+               OR (blocker_id = ? AND blocked_id = ?)
+        ''', (current_user.id, target_user.id, target_user.id, current_user.id))
+        
+        if cur.fetchone():
+            return jsonify({'success': False, 'error': 'Cannot send message to this user'}), 403
+    
+    # Send the message
+    try:
+        with get_db() as conn:
+            cur = conn.cursor()
+            
+            # Insert the message
+            cur.execute(
+                'INSERT INTO private_messages (sender_id, receiver_id, content, timestamp) VALUES (?, ?, ?, ?)',
+                (current_user.id, target_user.id, content, datetime.now().isoformat())
+            )
+            msg_id = cur.lastrowid
+            conn.commit()
+            
+            # Get the inserted message with user details
+            cur.execute('''SELECT pm.content, pm.timestamp, u.profile_image, u.display_name
+                           FROM private_messages pm 
+                           JOIN users u ON pm.sender_id = u.id 
+                           WHERE pm.id=?''', (msg_id,))
+            row = cur.fetchone()
+            
+            if not row:
+                return jsonify({'success': False, 'error': 'Failed to save message'}), 500
+            
+            message = {
+                'username': current_user.username,
+                'display_name': row[3] or current_user.username,
+                'content': row[0],
+                'timestamp': row[1],
+                'profile_image': row[2] or 'default.png',
+                'sender': current_user.username,
+                'recipient': recipient
+            }
+        
+        return jsonify({'success': True, 'message': message})
+        
+    except Exception as e:
+        print(f"Error sending PM: {e}")
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+@app.route('/api/pm_history/<target_user>')
+@login_required
+def api_pm_history(target_user):
+    """API endpoint to get PM history with a specific user"""
+    # Validate target user exists
+    target_user_obj = get_user_by_username(target_user)
+    if not target_user_obj:
+        return jsonify({'success': False, 'error': f'User "{target_user}" not found'}), 404
+    
+    if target_user_obj.id == current_user.id:
+        return jsonify({'success': False, 'error': 'Cannot get PM history with yourself'}), 400
+    
+    # Check if either user has blocked the other
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT 1 FROM user_blocks 
+            WHERE (blocker_id = ? AND blocked_id = ?) 
+               OR (blocker_id = ? AND blocked_id = ?)
+        ''', (current_user.id, target_user_obj.id, target_user_obj.id, current_user.id))
+        
+        if cur.fetchone():
+            return jsonify({'success': False, 'error': 'Cannot access chat with this user'}), 403
+        
+        # Get PM history
+        cur.execute('''
+            SELECT pm.content, pm.timestamp, u.username, u.display_name, u.profile_image
+            FROM private_messages pm
+            INNER JOIN users u ON pm.sender_id = u.id
+            WHERE (pm.sender_id = ? AND pm.receiver_id = ?)
+               OR (pm.sender_id = ? AND pm.receiver_id = ?)
+            ORDER BY pm.timestamp ASC
+            LIMIT 100
+        ''', (current_user.id, target_user_obj.id, target_user_obj.id, current_user.id))
+        
+        rows = cur.fetchall()
+        messages = [
+            {
+                'content': row[0], 
+                'timestamp': row[1], 
+                'username': row[2], 
+                'display_name': row[3] or row[2], 
+                'profile_image': row[4] or 'default.png',
+                'is_own': row[2] == current_user.username
+            } 
+            for row in rows
+        ]
+        
+    return jsonify({'success': True, 'messages': messages})
+
+@app.route('/api/pm_notifications')
+@login_required
+def api_pm_notifications():
+    """API endpoint to check for new PM notifications"""
+    with get_db() as conn:
+        cur = conn.cursor()
+        # Get unread PM count for current user
+        cur.execute('''
+            SELECT COUNT(*) as unread_count
+            FROM private_messages pm
+            WHERE pm.receiver_id = ? AND pm.read = 0
+        ''', (current_user.id,))
+        
+        unread_count = cur.fetchone()[0]
+        
+        # Get recent unread messages with sender info
+        cur.execute('''
+            SELECT pm.content, pm.timestamp, u.username, u.display_name, u.profile_image
+            FROM private_messages pm
+            INNER JOIN users u ON pm.sender_id = u.id
+            WHERE pm.receiver_id = ? AND pm.read = 0
+            ORDER BY pm.timestamp DESC
+            LIMIT 5
+        ''', (current_user.id,))
+        
+        recent_messages = []
+        for row in cur.fetchall():
+            recent_messages.append({
+                'content': row[0],
+                'timestamp': row[1],
+                'username': row[2],
+                'display_name': row[3] or row[2],
+                'profile_image': row[4] or 'default.png'
+            })
+        
+        return jsonify({
+            'success': True,
+            'unread_count': unread_count,
+            'recent_messages': recent_messages
+        })
+
+@app.route('/api/mark_pm_read/<target_user>', methods=['POST'])
+@login_required
+def api_mark_pm_read(target_user):
+    """API endpoint to mark PM messages as read"""
+    target_user_obj = get_user_by_username(target_user)
+    if not target_user_obj:
+        return jsonify({'success': False, 'error': f'User "{target_user}" not found'}), 404
+    
+    with get_db() as conn:
+        cur = conn.cursor()
+        # Mark messages from this user as read
+        cur.execute('''
+            UPDATE private_messages 
+            SET read = 1 
+            WHERE sender_id = ? AND receiver_id = ? AND read = 0
+        ''', (target_user_obj.id, current_user.id))
+        conn.commit()
+        
+        return jsonify({'success': True, 'marked_read': cur.rowcount})
+
+def mark_inactive_users_offline():
+    """Background task to mark users as offline after 5 minutes of inactivity"""
+    last_check_time = None
+    while True:
+        try:
+            current_time = datetime.now()
+            
+            # Only run this task every 2 minutes instead of every 30 seconds
+            if last_check_time and (current_time - last_check_time).total_seconds() < 120:
+                time.sleep(30)
+                continue
+                
+            last_check_time = current_time
+            
+            with get_db() as conn:
+                cur = conn.cursor()
+                # Find users who haven't been active in the last 5 minutes
+                five_minutes_ago = (current_time - timedelta(minutes=5)).isoformat()
+                
+                # More efficient query - only get users who were recently online
+                cur.execute('''
+                    SELECT id, username FROM users 
+                    WHERE last_seen < ? 
+                    AND last_seen IS NOT NULL
+                    AND last_seen > datetime('now', '-1 hour')
+                ''', (five_minutes_ago,))
+                inactive_users = cur.fetchall()
+                
+                if inactive_users:
+                    for user_id, username in inactive_users:
+                        # Broadcast offline status for each inactive user
+                        try:
+                            socketio.emit('user_status_change', {
+                                'user_id': user_id,
+                                'username': username,
+                                'status': 'offline'
+                            })
+                            print(f"Marked user {username} as offline due to inactivity")
+                        except Exception as e:
+                            print(f"Error broadcasting offline status for {username}: {e}")
+                    
+        except Exception as e:
+            print(f"Error in mark_inactive_users_offline: {e}")
+        
+        # Sleep for 30 seconds before next check
+        time.sleep(30)
+
+# Start background task for marking inactive users
+def start_background_tasks():
+    """Start background tasks"""
+    offline_thread = threading.Thread(target=mark_inactive_users_offline, daemon=True)
+    offline_thread.start()
+    print("Background tasks started")
+
 if __name__ == '__main__':
-    from db.init_db import init_db
-    init_db()
-    socketio.run(app, debug=True)
+    start_background_tasks()
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)

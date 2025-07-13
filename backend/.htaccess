@@ -1,0 +1,5 @@
+# cPanel .htaccess file for Flask application
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ /backend/wsgi.py/$1 [QSA,L]
+Options -Indexes 

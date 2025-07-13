@@ -18,8 +18,8 @@ class Config:
     # Security settings
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
-    PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
+    SESSION_COOKIE_SAMESITE = 'Strict'
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=8)  # Reduced from 24 hours
     
     # Rate limiting
     RATELIMIT_ENABLED = True
