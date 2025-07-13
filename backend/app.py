@@ -2,19 +2,65 @@ from flask import Flask, jsonify, render_template, request, redirect, url_for, f
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import os
-from auth import User, register_user, authenticate_user, get_user_by_id
-from auth import get_user_by_username
+try:
+    from auth import User, register_user, authenticate_user, get_user_by_id
+    from auth import get_user_by_username
+except ImportError:
+    from .auth import User, register_user, authenticate_user, get_user_by_id
+    from .auth import get_user_by_username
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import sqlite3
 from datetime import datetime, timedelta
 from functools import wraps
 import re
 import glob
-from security import security_manager, check_message_security, sanitize_user_input, log_security_event
-from logging_config import setup_logging, log_request_info, log_error_with_context
+try:
+    from security import security_manager, check_message_security, sanitize_user_input, log_security_event
+except ImportError:
+    from .security import security_manager, check_message_security, sanitize_user_input, log_security_event
+try:
+    from logging_config import setup_logging, log_request_info, log_error_with_context
+except ImportError:
+    from .logging_config import setup_logging, log_request_info, log_error_with_context
 import threading
 import time
-from werkzeug.security import check_password_hash, generate_password_hash
+from collections import defaultdict, deque
+from typing import Any, Dict, List, Optional, Union
+
+# Password attempt rate limiting storage
+password_attempts = defaultdict(list)  # {user_id: [(timestamp, room_slug), ...]}
+PASSWORD_ATTEMPT_LIMIT = 5  # Max attempts per time window
+PASSWORD_ATTEMPT_WINDOW = 300  # 5 minutes in seconds
+
+def check_password_attempts(user_id, room_slug):
+    """Check if user has exceeded password attempt limit for a room"""
+    now = time.time()
+    attempts = password_attempts[user_id]
+    
+    # Remove old attempts outside the time window
+    attempts[:] = [(timestamp, slug) for timestamp, slug in attempts 
+                   if now - timestamp < PASSWORD_ATTEMPT_WINDOW and slug == room_slug]
+    
+    # Check if limit exceeded
+    if len(attempts) >= PASSWORD_ATTEMPT_LIMIT:
+        return False, f"Too many password attempts. Please wait {PASSWORD_ATTEMPT_WINDOW // 60} minutes before trying again."
+    
+    return True, "OK"
+
+def record_password_attempt(user_id, room_slug, success=False):
+    """Record a password attempt"""
+    now = time.time()
+    password_attempts[user_id].append((now, room_slug))
+    
+    # Clean up old attempts for this user (older than 5 minutes)
+    attempts = password_attempts[user_id]
+    attempts[:] = [(timestamp, slug) for timestamp, slug in attempts 
+                   if now - timestamp < PASSWORD_ATTEMPT_WINDOW]
+    
+    # If successful, clear all attempts for this room
+    if success:
+        attempts[:] = [(timestamp, slug) for timestamp, slug in attempts 
+                       if slug != room_slug]
 
 # Initialize database on import (for cPanel deployment)
 try:
@@ -51,6 +97,14 @@ else:
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Type-safe wrapper for socketio.emit to fix type annotation issues
+def socketio_emit(event: str, data: Any, room: Optional[str] = None) -> None:
+    """Type-safe wrapper for socketio.emit"""
+    if room:
+        socketio.emit(event, data, room=room)  # type: ignore
+    else:
+        socketio.emit(event, data)  # type: ignore
+
 # Setup logging
 loggers = setup_logging()
 app_logger = loggers['app']
@@ -63,11 +117,14 @@ app_logger.info("Initializing Flask application...")
 # --- Login Manager ---
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
+login_manager.login_view = 'login'  # type: ignore
 
 @login_manager.user_loader
 def load_user(user_id):
-    return get_user_by_id(user_id)
+    user = get_user_by_id(user_id)
+    if user is None:
+        return None
+    return user
 
 # --- Error Handlers ---
 @app.errorhandler(404)
@@ -93,6 +150,35 @@ def log_request():
         log_request_info(request, app_logger)
 
 # --- Helper Functions ---
+def safe_log(message, data=None):
+    """Safely log messages that may contain Unicode characters"""
+    try:
+        if data is not None:
+            # Convert data to a safe string representation
+            if isinstance(data, (list, dict)):
+                safe_data = []
+                for item in data if isinstance(data, list) else data.items():
+                    if isinstance(item, dict):
+                        safe_item = {}
+                        for key, value in item.items():
+                            if isinstance(value, str):
+                                # Encode to ASCII with replacement for non-ASCII chars
+                                safe_item[key] = value.encode('ascii', 'replace').decode('ascii')
+                            else:
+                                safe_item[key] = value
+                        safe_data.append(safe_item)
+                    else:
+                        safe_data.append(item)
+                print(f"{message}: {safe_data}")
+            else:
+                safe_data = str(data).encode('ascii', 'replace').decode('ascii')
+                print(f"{message}: {safe_data}")
+        else:
+            print(message)
+    except Exception as e:
+        # Fallback: just print the message without data
+        print(f"{message} [Data logging failed: {str(e)}]")
+
 def format_join_date(date_str):
     """Format join date in a user-friendly way"""
     if not date_str:
@@ -111,54 +197,28 @@ def format_join_date(date_str):
         return str(date_str) if date_str else 'Unknown'
 
 def check_room_access(room_slug, user_id):
-    """Check if user can access a room (including password verification)"""
+    """Check if user has access to a room (for password-protected rooms)"""
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute('SELECT id, name, password, is_hidden FROM rooms WHERE slug=?', (room_slug,))
+        cur.execute('SELECT password FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
         room = cur.fetchone()
-        
         if not room:
             return False, "Room not found"
         
-        room_id, room_name, room_password, is_hidden = room
+        room_password = room[0]
+        if room_password:  # Room is password protected
+            if not session.get(f'room_access_{room_slug}', False):
+                return False, "Access denied. Please enter room password first."
         
-        # Check if room is hidden (admin only)
-        if is_hidden:
-            cur.execute('SELECT is_admin FROM users WHERE id = ?', (user_id,))
-            user = cur.fetchone()
-            if not user or not user[0]:
-                return False, "Access denied - Hidden room"
-        
-        # Check if room has password
-        if room_password:
-            # Check if user has verified password in session
-            session_key = f'room_access_{room_slug}'
-            if not session.get(session_key):
-                return False, "Password required"
-        
-        return True, room_id
+        return True, "Access granted"
 
 # --- Database Helper ---
-def get_db():
-    try:
-        db_logger.debug("Getting database connection")
-        # Handle case where __file__ is not defined (e.g., in background threads)
-        try:
-            db_path = os.path.join(os.path.dirname(__file__), 'db', 'chatroom.db')
-        except NameError:
-            # Fallback for background threads or when __file__ is not available
-            db_path = os.path.join(os.getcwd(), 'db', 'chatroom.db')
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        db_logger.error(f"Database connection error: {e}")
-        raise
+from database import get_db, DatabaseContext, with_db_retry
 
 # --- Main Routes ---
 @app.route('/')
 def home():
-    with get_db() as conn:
+    with DatabaseContext() as conn:
         cur = conn.cursor()
         # Get stats for home page - optimized queries
         cur.execute('SELECT COUNT(*) FROM users')
@@ -190,6 +250,40 @@ def home():
 def ping():
     return jsonify({'status': 'ok'})
 
+@app.route('/test')
+def test_template():
+    """Test route to check if template rendering is working"""
+    try:
+        return render_template('base.html', content='<div class="text-center py-5"><h2>Test Page</h2><p>Template rendering is working!</p></div>')
+    except Exception as e:
+        return f"Template rendering error: {str(e)}", 500
+
+@app.route('/test-static')
+def test_static():
+    """Test route to check if static files are accessible"""
+    import os
+    static_folder = app.static_folder
+    static_url_path = app.static_url_path
+    
+    # Add null checks
+    static_folder_exists = False
+    css_exists = False
+    js_exists = False
+    
+    if static_folder:
+        static_folder_exists = os.path.exists(static_folder)
+        if static_folder_exists:
+            css_exists = os.path.exists(os.path.join(static_folder, 'css', 'main.css'))
+            js_exists = os.path.exists(os.path.join(static_folder, 'js', 'chat.js'))
+    
+    return jsonify({
+        'static_folder': static_folder,
+        'static_url_path': static_url_path,
+        'static_folder_exists': static_folder_exists,
+        'css_exists': css_exists,
+        'js_exists': js_exists
+    })
+
 # --- Auth Routes ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -217,9 +311,12 @@ def register():
             if reg_error:
                 error = reg_error
             else:
-                login_user(user)
-                log_security_event("USER_REGISTERED", user.id, f"Username: {username}")
-                return redirect(url_for('dashboard'))
+                if user is not None:  # Add null check
+                    login_user(user)
+                    log_security_event("USER_REGISTERED", user.id, f"Username: {username}")
+                    return redirect(url_for('dashboard'))
+                else:
+                    error = 'Registration failed. Please try again.'
     return render_template('register.html', error=error)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -268,7 +365,7 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    with get_db() as conn:
+    with DatabaseContext() as conn:
         cur = conn.cursor()
         
         # Get all users
@@ -313,8 +410,18 @@ def dashboard():
 @app.route('/chat')
 @login_required
 def chat():
-    rooms = fetch_rooms()
-    return render_template('chat.html', rooms=rooms, current_user_username=current_user.username)
+    print(f"Chat route accessed by user: {current_user.username}")
+    try:
+        rooms = fetch_rooms()
+        print(f"Fetched {len(rooms)} rooms for chat page")
+        result = render_template('chat.html', rooms=rooms, current_user_username=current_user.username)
+        print("Template rendered successfully")
+        return result
+    except Exception as e:
+        print(f"Error in chat route: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Error rendering chat page: {str(e)}", 500
 
 # --- Admin ---
 def admin_required(f):
@@ -453,8 +560,9 @@ def profile():
                 cur = conn.cursor()
                 update_fields = ['username=?, email=?, display_name=?, bio=?, birth_date=?']
                 update_values = [username, email, display_name, bio, birth_date]
-                update_fields.append('profile_image=?')
-                update_values.append(selected_avatar if selected_avatar else None)
+                if selected_avatar is not None:
+                    update_fields.append('profile_image=?')
+                    update_values.append(selected_avatar)
                 if password:
                     import bcrypt
                     hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
@@ -513,205 +621,134 @@ def admin_create_room():
 
 # --- Real-time Room List ---
 def fetch_rooms():
-    print('fetch_rooms() called')
-    with get_db() as conn:
+    safe_log('fetch_rooms() called')
+    with DatabaseContext() as conn:
         cur = conn.cursor()
-        # Get all non-hidden rooms
+        # Get all non-hidden rooms (including password-protected ones)
         cur.execute('SELECT id, name, slug, password, created_at, hidden FROM rooms WHERE hidden = 0 ORDER BY created_at ASC')
         all_rooms = cur.fetchall()
         
-        # Filter rooms based on user access
-        accessible_rooms = []
+        # Return all non-hidden rooms (password-protected rooms should always be visible)
+        rooms = []
         for row in all_rooms:
             room_id, name, slug, password, created_at, hidden = row
             has_password = bool(password)
             
-            # If room has password, check if user has access
-            if has_password:
-                # Check if user has verified password for this room
-                if hasattr(current_user, 'id'):
-                    # Check session for password verification
-                    password_verified = session.get(f'room_access_{slug}', False)
-                    if password_verified:
-                        accessible_rooms.append(dict(
-                            id=room_id, 
-                            name=name, 
-                            slug=slug, 
-                            has_password=has_password, 
-                            created_at=created_at, 
-                            hidden=bool(hidden)
-                        ))
-            else:
-                # No password required, always accessible
-                accessible_rooms.append(dict(
-                    id=room_id, 
-                    name=name, 
-                    slug=slug, 
-                    has_password=has_password, 
-                    created_at=created_at, 
-                    hidden=bool(hidden)
-                ))
+            rooms.append(dict(
+                id=room_id, 
+                name=name, 
+                slug=slug, 
+                has_password=has_password,
+                created_at=created_at
+            ))
         
-        print(f'fetch_rooms() returning {len(accessible_rooms)} accessible rooms: {accessible_rooms}')
-        return accessible_rooms
+        safe_log('Fetched rooms for display', rooms)
+        return rooms
 
 def fetch_all_rooms():
     """Fetch all rooms including hidden ones for admin panel"""
-    with get_db() as conn:
+    with DatabaseContext() as conn:
         cur = conn.cursor()
         cur.execute('SELECT id, name, slug, password, created_at, hidden FROM rooms ORDER BY created_at DESC')
         return [dict(id=row[0], name=row[1], slug=row[2], has_password=bool(row[3]), created_at=row[4], hidden=bool(row[5])) for row in cur.fetchall()]
 
 @socketio.on('get_rooms')
 def handle_get_rooms():
-    print(f'get_rooms event received from {current_user.username}')
+    safe_log(f'get_rooms event received from {current_user.username}')
     rooms = fetch_rooms()
-    print(f'Fetched rooms: {rooms}')
+    safe_log('Fetched rooms for socket event', rooms)
     emit('room_list', rooms)
 
 # --- Room Join Page ---
 @app.route('/chat/room/<room_slug>')
 @login_required
 def chat_room(room_slug):
-    access_ok, access_msg = check_room_access(room_slug, current_user.id)
-    if not access_ok:
+    # Validate room exists
+    def get_room():
+        with DatabaseContext() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
+            return cur.fetchone()
+    room = with_db_retry(get_room)
+    if not room:
+        flash('Room not found.', 'danger')
+        return redirect(url_for('chat'))
+    room_id, room_name, room_password = room
+    has_password = bool(room_password)
+    password_verified = session.get(f'room_access_{room_slug}', False)
+    if has_password and not password_verified:
+        flash('This room is password protected. Please enter the password to access it.', 'warning')
         return redirect(url_for('room_password_page', room_slug=room_slug))
-    
-    # Get room details
-    with get_db() as conn:
-        cur = conn.cursor()
-        cur.execute('SELECT id, name, slug FROM rooms WHERE slug=?', (room_slug,))
-        room = cur.fetchone()
-        
-        if not room:
-            flash('Room not found', 'error')
-            return redirect(url_for('chat'))
-        
-        room_id, room_name, room_slug = room
-    
-    return render_template('chat_room.html', room_name=room_name, room_slug=room_slug)
+    room_data = {
+        'id': room_id, 
+        'name': room_name, 
+        'slug': room_slug, 
+        'has_password': has_password,
+        'password_verified': password_verified
+    }
+    return render_template('chat.html', room=room_data, current_user_username=current_user.username)
 
 @app.route('/chat/room/<room_slug>/join', methods=['POST'])
 @login_required
 def join_room_with_password(room_slug):
-    """Join a password-protected room with rate limiting"""
     password = request.form.get('password', '').strip()
-    
-    if not password:
-        flash('Password is required', 'error')
+    # Check rate limiting for password attempts
+    rate_ok, rate_msg = check_password_attempts(current_user.id, room_slug)  # type: ignore
+    if not rate_ok:
+        flash(rate_msg, 'danger')
         return redirect(url_for('room_password_page', room_slug=room_slug))
-    
-    # Rate limiting for password attempts
-    session_key = f'password_attempts_{room_slug}'
-    attempts = session.get(session_key, {'count': 0, 'first_attempt': None})
-    
-    # Check if user is rate limited
-    if attempts['count'] >= 5:
-        if attempts['first_attempt']:
-            time_diff = datetime.now() - attempts['first_attempt']
-            if time_diff.total_seconds() < 300:  # 5 minutes
-                remaining_time = int((300 - time_diff.total_seconds()) / 60)
-                flash(f'Too many password attempts. Try again in {remaining_time} minutes.', 'error')
-                return redirect(url_for('room_password_page', room_slug=room_slug))
-            else:
-                # Reset attempts after 5 minutes
-                attempts = {'count': 0, 'first_attempt': None}
-    
-    with get_db() as conn:
-        cur = conn.cursor()
-        cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
-        room = cur.fetchone()
-        
-        if not room:
-            flash('Room not found', 'error')
-            return redirect(url_for('chat'))
-        
-        room_id, room_name, room_password = room
-        
-        # Verify password
-        if not room_password or not check_password_hash(room_password, password):
-            # Increment attempt counter
-            if attempts['count'] == 0:
-                attempts['first_attempt'] = datetime.now()
-            attempts['count'] += 1
-            session[session_key] = attempts
-            
-            remaining_attempts = 5 - attempts['count']
-            if remaining_attempts > 0:
-                flash(f'Incorrect password. {remaining_attempts} attempts remaining.', 'error')
-            else:
-                flash('Too many incorrect attempts. Try again in 5 minutes.', 'error')
-            
+    def get_room():
+        with DatabaseContext() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
+            return cur.fetchone()
+    room = with_db_retry(get_room)
+    if not room:
+        flash('Room not found.', 'danger')
+        return redirect(url_for('chat'))
+    room_id, room_name, room_password = room
+    # Check if room has password
+    if room_password:
+        if room_password != password:
+            record_password_attempt(current_user.id, room_slug, success=False)  # type: ignore
+            flash('Incorrect password.', 'danger')
             return redirect(url_for('room_password_page', room_slug=room_slug))
-        
-        # Password is correct - clear attempts and grant access
-        session.pop(session_key, None)  # Clear attempts
-        session[f'room_access_{room_slug}'] = True
-        flash(f'Successfully joined {room_name}', 'success')
-        
+        else:
+            record_password_attempt(current_user.id, room_slug, success=True)  # type: ignore
+    session[f'room_access_{room_slug}'] = True
     return redirect(url_for('chat_room', room_slug=room_slug))
 
 @app.route('/chat/room/<room_slug>/password')
 @login_required
 def room_password_page(room_slug):
     """Page for entering password to access password-protected room"""
-    # Validate room exists and has password
-    with get_db() as conn:
-        cur = conn.cursor()
-        cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
-        room = cur.fetchone()
-    
+    def get_room():
+        with DatabaseContext() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
+            return cur.fetchone()
+    room = with_db_retry(get_room)
     if not room:
         flash('Room not found.', 'danger')
         return redirect(url_for('chat'))
-    
     room_id, room_name, room_password = room
-    
     if not room_password:
-        # Room doesn't have password, redirect to room
         return redirect(url_for('chat_room', room_slug=room_slug))
-    
-    # Check if user already has access
     if session.get(f'room_access_{room_slug}', False):
         return redirect(url_for('chat_room', room_slug=room_slug))
-    
-    # Check rate limiting status
-    session_key = f'password_attempts_{room_slug}'
-    attempts = session.get(session_key, {'count': 0, 'first_attempt': None})
-    
-    rate_limited = False
-    remaining_time = 0
-    
-    if attempts['count'] >= 5 and attempts['first_attempt']:
-        time_diff = datetime.now() - attempts['first_attempt']
-        if time_diff.total_seconds() < 300:  # 5 minutes
-            rate_limited = True
-            remaining_time = int((300 - time_diff.total_seconds()) / 60)
-        else:
-            # Reset attempts after 5 minutes
-            session.pop(session_key, None)
-    
-    return render_template('room_password.html', 
-                         room={'name': room_name, 'slug': room_slug},
-                         rate_limited=rate_limited,
-                         remaining_time=remaining_time,
-                         attempts_remaining=5 - attempts['count'] if not rate_limited else 0)
+    return render_template('room_password.html', room={'name': room_name, 'slug': room_slug})
 
 # --- SocketIO Handlers ---
 @socketio.on('connect')
 @login_required
 def handle_connect(auth=None):
-    print(f'Client connected: {current_user.username}')
-    # Join user's personal room for notifications
+    safe_log(f'Client connected: {current_user.username}')
     join_room(f'user_{current_user.id}')
-    
-    # Update user's online status
-    with get_db() as conn:
-        cur = conn.cursor()
-        cur.execute('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id,))
-        conn.commit()
-    
-    # Broadcast online status to all users
+    def update_last_seen():
+        with DatabaseContext() as conn:
+            cur = conn.cursor()
+            cur.execute('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id,))
+    with_db_retry(update_last_seen)
     socketio.emit('user_status_change', {
         'user_id': current_user.id,
         'username': current_user.username,
@@ -721,15 +758,13 @@ def handle_connect(auth=None):
 @socketio.on('disconnect')
 def handle_disconnect():
     print('Client disconnected')
-    # Don't immediately mark user as offline - they might reconnect
-    # Only update last_seen timestamp
     if hasattr(current_user, 'id'):
-        with get_db() as conn:
-            cur = conn.cursor()
-            cur.execute('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id,))
-            conn.commit()
-        # Don't broadcast offline status immediately - wait for reconnection timeout
-        # The user will be marked offline after 5 minutes of inactivity
+        def update_last_seen():
+            with DatabaseContext() as conn:
+                cur = conn.cursor()
+                cur.execute('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id,))
+        with_db_retry(update_last_seen)
+    # No immediate offline broadcast; handled by inactivity timeout
 
 @socketio.on('join_room')
 @login_required
@@ -741,14 +776,14 @@ def handle_join_room(data):
     # Check room access
     access_ok, access_msg = check_room_access(room_slug, current_user.id)
     if not access_ok:
-        print(f"User {current_user.username} tried to join room {room_slug}: {access_msg}")
+        safe_log(f"User {current_user.username} tried to join room {room_slug}: {access_msg}")
         emit('error', {'message': access_msg})
         return
     
     join_room(room_slug)
-    print(f'{current_user.username} joined room {room_slug}')
+    safe_log(f'{current_user.username} joined room {room_slug}')
     # Announce user joining to the room
-    socketio.emit('user_joined', {'username': current_user.username}, room=room_slug)
+    socketio.emit('user_joined', {'username': current_user.username}, room=room_slug)  # type: ignore
 
 @socketio.on('leave_room')
 @login_required
@@ -757,9 +792,9 @@ def handle_leave_room(data):
     if not room_slug:
         return
     leave_room(room_slug)
-    print(f'{current_user.username} left room {room_slug}')
+    safe_log(f'{current_user.username} left room {room_slug}')
     # Announce user leaving to the room
-    socketio.emit('user_left', {'username': current_user.username}, room=room_slug)
+    socketio.emit('user_left', {'username': current_user.username}, room=room_slug)  # type: ignore
 
 @socketio.on('send_message')
 @login_required
@@ -788,7 +823,7 @@ def handle_send_message(data):
     # Sanitize content
     content = sanitize_user_input(content)
     
-    # Check room access (including password verification)
+    # Check room access
     access_ok, access_msg = check_room_access(room_slug, current_user.id)
     if not access_ok:
         print(f"User {current_user.username} tried to send message to room {room_slug}: {access_msg}")
@@ -843,21 +878,21 @@ def handle_send_message(data):
         }
         print(f"Broadcasting message: {msg}")
     
-    socketio.emit('new_message', msg, room=room_slug)
+    socketio.emit('new_message', msg, room=room_slug)  # type: ignore
 
 @socketio.on('get_chat_history')
 @login_required
 def handle_get_chat_history(data):
-    """Handle chat history request"""
+    print(f"get_chat_history event received from {current_user.username}: {data}")
     room_slug = data.get('room')
-    
     if not room_slug:
-        emit('error', {'message': 'Room is required'})
+        print("No room provided")
         return
     
-    # Check room access (including password verification)
+    # Check room access
     access_ok, access_msg = check_room_access(room_slug, current_user.id)
     if not access_ok:
+        print(f"User {current_user.username} tried to access chat history of room {room_slug}: {access_msg}")
         emit('error', {'message': access_msg})
         return
         
@@ -867,12 +902,14 @@ def handle_get_chat_history(data):
         cur.execute('SELECT id FROM rooms WHERE slug=? LIMIT 1', (room_slug,))
         room = cur.fetchone()
         if not room:
-            emit('error', {'message': 'Room not found'})
+            print(f"Room not found: {room_slug}")
+            emit('chat_history', [])
             return
         
         room_id = room[0]
+        print(f"Loading chat history for room ID: {room_id}")
         
-        # Get chat history
+        # Optimized query: Limit to last 100 messages, use proper indexing
         cur.execute('''
             SELECT m.content, m.timestamp, u.username, u.display_name, u.profile_image, r.slug as room_slug
             FROM messages m
@@ -889,8 +926,9 @@ def handle_get_chat_history(data):
             {'content': row[0], 'timestamp': row[1], 'username': row[2], 'display_name': row[3], 'profile_image': row[4], 'room_slug': row[5]} 
             for row in reversed(rows)
         ]
+        print(f"Found {len(messages)} messages for room {room_slug}")
         
-    emit('chat_history', {'messages': messages})
+    emit('chat_history', messages)
 
 # --- Helper for PM room name ---
 
@@ -1193,7 +1231,7 @@ def handle_join_pm(data):
         return
     room_name = _pm_room_name(current_user.id, target_user.id)
     join_room(room_name)
-    print(f'{current_user.username} joined private room {room_name}')
+    safe_log(f'{current_user.username} joined private room {room_name}')
     
     # Also join the target user's personal room for notifications
     join_room(f'user_{target_user.id}')
@@ -1317,7 +1355,7 @@ def handle_send_pm(data):
             # Send to PM room
             room_name = _pm_room_name(current_user.id, target_user.id)
             print(f"Emitting to room: {room_name}")
-            socketio.emit('new_pm', message, room=room_name)
+            socketio.emit('new_pm', message, room=room_name)  # type: ignore
             
             # Send notification to receiver
             notification = {
@@ -1326,13 +1364,14 @@ def handle_send_pm(data):
                 'message': content[:50] + '...' if len(content) > 50 else content,
                 'timestamp': row[1]
             }
-            socketio.emit('notification', notification, room=f'user_{target_user.id}')
+            socketio.emit('notification', notification, room=f'user_{target_user.id}')  # type: ignore
             
             print("PM sent successfully")
             
     except Exception as e:
         print(f"Error sending PM: {e}")
         emit('error', {'message': 'Internal server error'})
+        return
 
 @socketio.on('get_pm_history')
 @login_required
@@ -1404,7 +1443,7 @@ def handle_typing(data):
         return
     socketio.emit('typing', {
         'username': current_user.username
-    }, room=room_slug)
+    }, room=room_slug)  # type: ignore
 
 @socketio.on('stop_typing')
 @login_required
@@ -1415,7 +1454,7 @@ def handle_stop_typing(data):
         return
     socketio.emit('stop_typing', {
         'username': current_user.username
-    }, room=room_slug)
+    }, room=room_slug)  # type: ignore
 
 @socketio.on('pm_typing')
 @login_required
@@ -1430,7 +1469,7 @@ def handle_pm_typing(data):
     room_name = _pm_room_name(current_user.id, target_user.id)
     socketio.emit('pm_typing', {
         'sender': current_user.username
-    }, room=room_name)
+    }, room=room_name)  # type: ignore
 
 @socketio.on('pm_stop_typing')
 @login_required
@@ -1445,7 +1484,7 @@ def handle_pm_stop_typing(data):
     room_name = _pm_room_name(current_user.id, target_user.id)
     socketio.emit('pm_stop_typing', {
         'sender': current_user.username
-    }, room=room_name)
+    }, room=room_name)  # type: ignore
 
 @socketio.on('search_users')
 @login_required
@@ -1589,7 +1628,7 @@ def api_send_message():
     # Sanitize content
     content = sanitize_user_input(content)
     
-    # Check room access (including password verification)
+    # Check room access
     access_ok, access_msg = check_room_access(room_slug, current_user.id)
     if not access_ok:
         return jsonify({'success': False, 'error': access_msg}), 403
@@ -1624,7 +1663,7 @@ def api_send_message():
         msg_row = cur.fetchone()
         
         if not msg_row:
-            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+            return jsonify({'success': False, 'error': 'Failed to save message'}), 500
             
         msg = {
             'username': msg_row[2],
@@ -1641,7 +1680,7 @@ def api_send_message():
 @login_required
 def api_chat_history(room_slug):
     """API endpoint to get chat history"""
-    # Check room access (including password verification)
+    # Check room access
     access_ok, access_msg = check_room_access(room_slug, current_user.id)
     if not access_ok:
         return jsonify({'success': False, 'error': access_msg}), 403

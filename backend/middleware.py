@@ -47,10 +47,10 @@ class SecurityMiddleware:
         self.app = app
         
         # Register before_request handler
-        app.before_request(self.before_request)
+        app.before_request(lambda: self.before_request())
         
         # Register after_request handler
-        app.after_request(self.after_request)
+        app.after_request(lambda response: self.after_request(response))
         
         # Register error handlers
         app.register_error_handler(400, self.bad_request)
@@ -102,8 +102,9 @@ class SecurityMiddleware:
     def get_client_ip(self):
         """Get the real client IP address"""
         # Check for forwarded headers
-        if request.headers.get('X-Forwarded-For'):
-            return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+        x_forwarded_for = request.headers.get('X-Forwarded-For')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
         elif request.headers.get('X-Real-IP'):
             return request.headers.get('X-Real-IP')
         else:

@@ -6,6 +6,7 @@ Includes security middleware and proper configuration
 
 import os
 import sys
+from flask import g
 from app import app, socketio
 from config import get_config
 from middleware import SecurityMiddleware
@@ -20,7 +21,8 @@ def main():
     
     # Initialize security middleware
     security_middleware = SecurityMiddleware(app)
-    app.security_middleware = security_middleware
+    # Store middleware in Flask's g object for access in decorators
+    app.before_request(lambda: setattr(g, 'security_middleware', security_middleware))
     
     # Set environment variables
     os.environ['FLASK_ENV'] = os.environ.get('FLASK_ENV', 'development')
