@@ -3,8 +3,8 @@ from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import os
 try:
-    from auth import User, register_user, authenticate_user, get_user_by_id
-    from auth import get_user_by_username
+from auth import User, register_user, authenticate_user, get_user_by_id
+from auth import get_user_by_username
 except ImportError:
     from .auth import User, register_user, authenticate_user, get_user_by_id
     from .auth import get_user_by_username
@@ -312,9 +312,9 @@ def register():
                 error = reg_error
             else:
                 if user is not None:  # Add null check
-                    login_user(user)
+                login_user(user)
                     log_security_event("USER_REGISTERED", user.id, f"Username: {username}")
-                    return redirect(url_for('dashboard'))
+                return redirect(url_for('dashboard'))
                 else:
                     error = 'Registration failed. Please try again.'
     return render_template('register.html', error=error)
@@ -334,10 +334,10 @@ def login():
             error = login_msg
             app_logger.warning(f"Login blocked for {username}: {login_msg}")
         else:
-            user = authenticate_user(username, password)
-            if user:
+        user = authenticate_user(username, password)
+        if user:
                 security_manager.record_login_attempt(username, success=True)
-                login_user(user)
+            login_user(user)
                 app_logger.info(f"User {username} logged in successfully")
                 
                 # Get the next parameter for redirect
@@ -347,10 +347,10 @@ def login():
                     return redirect(next_page)
                 else:
                     app_logger.info(f"Redirecting {username} to dashboard")
-                    return redirect(url_for('dashboard'))
-            else:
+            return redirect(url_for('dashboard'))
+        else:
                 security_manager.record_login_attempt(username, success=False)
-                error = 'Invalid username or password.'
+            error = 'Invalid username or password.'
                 app_logger.warning(f"Failed login attempt for {username}")
     
     return render_template('login.html', error=error)
@@ -412,7 +412,7 @@ def dashboard():
 def chat():
     print(f"Chat route accessed by user: {current_user.username}")
     try:
-        rooms = fetch_rooms()
+    rooms = fetch_rooms()
         print(f"Fetched {len(rooms)} rooms for chat page")
         result = render_template('chat.html', rooms=rooms, current_user_username=current_user.username)
         print("Template rendered successfully")
@@ -666,7 +666,7 @@ def chat_room(room_slug):
     # Validate room exists
     def get_room():
         with DatabaseContext() as conn:
-            cur = conn.cursor()
+        cur = conn.cursor()
             cur.execute('SELECT id, name, password FROM rooms WHERE slug=?', (room_slug,))
             return cur.fetchone()
     room = with_db_retry(get_room)
@@ -1309,12 +1309,12 @@ def handle_send_pm(data):
             cur = conn.cursor()
             
             # Insert the message
-            cur.execute(
+        cur.execute(
                 'INSERT INTO private_messages (sender_id, receiver_id, content, timestamp) VALUES (?, ?, ?, ?)',
                 (current_user.id, target_user.id, content, datetime.now().isoformat())
-            )
-            msg_id = cur.lastrowid
-            conn.commit()
+        )
+        msg_id = cur.lastrowid
+        conn.commit()
             
             print(f"Message saved with ID: {msg_id}")
             
@@ -1333,17 +1333,17 @@ def handle_send_pm(data):
                            FROM private_messages pm 
                            JOIN users u ON pm.sender_id = u.id 
                            WHERE pm.id=?''', (msg_id,))
-            row = cur.fetchone()
+        row = cur.fetchone()
             
             if not row:
                 print("Error: Could not retrieve saved message")
                 emit('error', {'message': 'Failed to save message'})
                 return
             
-            message = {
-                'username': current_user.username,
+        message = {
+            'username': current_user.username,
                 'display_name': row[3] or current_user.username,
-                'content': row[0],
+            'content': row[0],
                 'timestamp': row[1],
                 'profile_image': row[2] or 'default.png',
                 'sender': current_user.username,
@@ -1362,8 +1362,8 @@ def handle_send_pm(data):
                 'type': 'pm',
                 'from': current_user.username,
                 'message': content[:50] + '...' if len(content) > 50 else content,
-                'timestamp': row[1]
-            }
+            'timestamp': row[1]
+        }
             socketio.emit('notification', notification, room=f'user_{target_user.id}')  # type: ignore
             
             print("PM sent successfully")
