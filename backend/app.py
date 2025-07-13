@@ -573,16 +573,9 @@ def handle_get_rooms():
 @app.route('/chat/room/<room_slug>')
 @login_required
 def chat_room(room_slug):
-    # Validate room exists and user has access
     access_ok, access_msg = check_room_access(room_slug, current_user.id)
-    
     if not access_ok:
-        if "Password required" in access_msg:
-            # Redirect to password entry page
-            return redirect(url_for('room_password_page', room_slug=room_slug))
-        else:
-            flash(access_msg, 'error')
-            return redirect(url_for('chat'))
+        return redirect(url_for('room_password_page', room_slug=room_slug))
     
     # Get room details
     with get_db() as conn:
@@ -867,7 +860,7 @@ def handle_get_chat_history(data):
     if not access_ok:
         emit('error', {'message': access_msg})
         return
-    
+        
     with get_db() as conn:
         cur = conn.cursor()
         # Get room ID
